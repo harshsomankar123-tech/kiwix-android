@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -40,7 +40,7 @@ import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens
 import org.kiwix.kiwixmobile.language.composables.LanguageListItem.LanguageItem
 
-const val LANGUAGE_ITEM_RADIO_BUTTON_TESTING_TAG = "languageItemRadioButtonTestingTag"
+const val LANGUAGE_ITEM_CHECKBOX_TESTING_TAG = "languageItemCheckboxTestingTag"
 
 @Composable
 fun LanguageItemRow(
@@ -62,16 +62,16 @@ fun LanguageItemRow(
       },
     verticalAlignment = Alignment.CenterVertically
   ) {
-    RadioButton(
+    Checkbox(
       modifier = Modifier
         .padding(ComposeDimens.SIXTEEN_DP)
         .semantics {
-          testTag = "$LANGUAGE_ITEM_RADIO_BUTTON_TESTING_TAG${language.language}"
+          testTag = "$LANGUAGE_ITEM_CHECKBOX_TESTING_TAG${language.language}"
           contentDescription =
             "${context.getString(R.string.select_language_content_description)}${language.language}"
         },
-      selected = language.active,
-      onClick = {
+      checked = language.active,
+      onCheckedChange = {
         onCheckedChange(item)
       }
     )

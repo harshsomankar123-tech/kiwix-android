@@ -107,7 +107,7 @@ class LanguageViewModel @Inject constructor(
       runCatching {
         Language(
           languageCode = entry.languageCode,
-          active = kiwixDataStore.selectedOnlineContentLanguage.first() == entry.languageCode,
+          active = kiwixDataStore.selectedOnlineContentLanguage.first().split(",").contains(entry.languageCode),
           occurrencesOfLanguage = entry.count,
           id = (index + ONE).toLong()
         )
@@ -223,10 +223,10 @@ class LanguageViewModel @Inject constructor(
   }
 
   private fun save(currentState: Content): State {
-    val selectedLanguage = currentState.items.first { it.active }
+    val selectedLanguages = currentState.items.filter { it.active }
     effects.tryEmit(
       SaveLanguagesAndFinish(
-        selectedLanguage,
+        selectedLanguages,
         kiwixDataStore,
         viewModelScope
       )
