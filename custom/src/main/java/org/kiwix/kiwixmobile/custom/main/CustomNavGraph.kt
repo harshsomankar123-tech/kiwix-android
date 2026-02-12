@@ -42,29 +42,32 @@ import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.help.HelpScreenRoute
 import org.kiwix.kiwixmobile.core.main.BOOKMARK_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.DOWNLOAD_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.HELP_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.HELP_SCREEN
 import org.kiwix.kiwixmobile.core.main.HISTORY_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.NOTES_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.READER_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.SEARCH_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.SETTINGS_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.SETTINGS_SCREEN
 import org.kiwix.kiwixmobile.core.page.bookmark.BookmarksFragment
 import org.kiwix.kiwixmobile.core.page.history.HistoryFragment
 import org.kiwix.kiwixmobile.core.page.notes.NotesFragment
 import org.kiwix.kiwixmobile.core.search.NAV_ARG_SEARCH_STRING
 import org.kiwix.kiwixmobile.core.search.SearchFragment
+import org.kiwix.kiwixmobile.core.settings.SettingsScreenRoute
 import org.kiwix.kiwixmobile.core.utils.EXTRA_IS_WIDGET_VOICE
 import org.kiwix.kiwixmobile.core.utils.TAG_FROM_TAB_SWITCHER
+import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.custom.download.CustomDownloadFragment
 import org.kiwix.kiwixmobile.custom.help.CustomHelpViewModel
-import org.kiwix.kiwixmobile.custom.settings.CustomSettingsFragment
+import org.kiwix.kiwixmobile.custom.settings.CustomSettingsViewModel
 
 @Suppress("LongMethod")
 @Composable
 fun CustomNavGraph(
   navController: NavHostController,
   modifier: Modifier = Modifier,
-  viewModelFactory: ViewModelProvider.Factory
+  viewModelFactory: ViewModelProvider.Factory,
+  alertDialogShower: AlertDialogShower
 ) {
   NavHost(
     navController = navController,
@@ -99,9 +102,12 @@ fun CustomNavGraph(
       )
     }
     composable(CustomDestination.Settings.route) {
-      FragmentContainer(R.id.settingsFragmentContainer) {
-        CustomSettingsFragment()
-      }
+      val customSettingsViewModel: CustomSettingsViewModel = viewModel(factory = viewModelFactory)
+      customSettingsViewModel.setAlertDialog(alertDialogShower)
+      SettingsScreenRoute(
+        customSettingsViewModel,
+        navController::popBackStack
+      )
     }
     composable(CustomDestination.Downloads.route) {
       FragmentContainer(R.id.downloadFragmentContainer) {
@@ -111,10 +117,6 @@ fun CustomNavGraph(
     composable(
       route = CustomDestination.Search.route,
       arguments = listOf(
-        navArgument(NAV_ARG_SEARCH_STRING) {
-          type = NavType.StringType
-          defaultValue = ""
-        },
         navArgument(TAG_FROM_TAB_SWITCHER) {
           type = NavType.BoolType
           defaultValue = false
@@ -122,19 +124,23 @@ fun CustomNavGraph(
         navArgument(EXTRA_IS_WIDGET_VOICE) {
           type = NavType.BoolType
           defaultValue = false
+        },
+        navArgument(NAV_ARG_SEARCH_STRING) {
+          type = NavType.StringType
+          defaultValue = ""
         }
       )
     ) { backStackEntry ->
+      val isVoice = backStackEntry.arguments?.getBoolean(EXTRA_IS_WIDGET_VOICE) ?: false
       val searchString = backStackEntry.arguments?.getString(NAV_ARG_SEARCH_STRING).orEmpty()
       val isOpenedFromTabSwitcher =
         backStackEntry.arguments?.getBoolean(TAG_FROM_TAB_SWITCHER) ?: false
-      val isVoice = backStackEntry.arguments?.getBoolean(EXTRA_IS_WIDGET_VOICE) ?: false
       FragmentContainer(R.id.searchFragmentContainer) {
         SearchFragment().apply {
           arguments = Bundle().apply {
-            putString(NAV_ARG_SEARCH_STRING, searchString)
-            putBoolean(TAG_FROM_TAB_SWITCHER, isOpenedFromTabSwitcher)
             putBoolean(EXTRA_IS_WIDGET_VOICE, isVoice)
+            putBoolean(TAG_FROM_TAB_SWITCHER, isOpenedFromTabSwitcher)
+            putString(NAV_ARG_SEARCH_STRING, searchString)
           }
         }
       }
@@ -180,8 +186,8 @@ sealed class CustomDestination(val route: String) {
   object History : CustomDestination(HISTORY_FRAGMENT)
   object Notes : CustomDestination(NOTES_FRAGMENT)
   object Bookmarks : CustomDestination(BOOKMARK_FRAGMENT)
-  object Help : CustomDestination(HELP_FRAGMENT)
-  object Settings : CustomDestination(SETTINGS_FRAGMENT)
+  object Help : CustomDestination(HELP_SCREEN)
+  object Settings : CustomDestination(SETTINGS_SCREEN)
   object Downloads : CustomDestination(DOWNLOAD_FRAGMENT)
   object Search : CustomDestination(
     SEARCH_FRAGMENT +

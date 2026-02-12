@@ -29,6 +29,7 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.spyk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,7 @@ import java.net.URL
 
 internal class ExternalLinkOpenerTest {
   private val kiwixDataStore: KiwixDataStore = mockk()
-  private val alertDialogShower: AlertDialogShower = mockk(relaxed = true)
+  private val alertDialogShower: AlertDialogShower = spyk(AlertDialogShower())
   private val packageManager: PackageManager = mockk()
   private val activity: Activity = mockk()
   private val coroutineScope = CoroutineScope(Dispatchers.Main)
