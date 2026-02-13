@@ -34,6 +34,9 @@
   <string name="menu_support_kiwix">دعم كيويكس</string>
   <string name="menu_support_kiwix_for_custom_apps">دعم %s</string>
   <string name="menu_about_app">تقريبا %s من التطبيق</string>
+  <string name="external_redirect_message">سيتم الآن إعادة توجيهك إلى موقعنا %s .</string>
+  <string name="support_donation_platform">منصة التبرعات</string>
+  <string name="about_app_page">صفحة حول التطبيق</string>
   <string name="menu_wifi_hotspot">كتب المضيف</string>
   <string name="save_media">حفظ الوسائط</string>
   <string name="save_media_error">حدث خطأ عند محاولة حفظ الوسائط!</string>
@@ -411,6 +414,13 @@
   <string name="downloading_state">جاري التحميل</string>
   <string name="download_failed_state">فشل</string>
   <string name="searchview_description_clear">مسح الاستعلام</string>
+  <string name="do_you_mean">هل تقصد:</string>
+  <string name="suggested_search_icon_description">انقر هنا لاستخدام هذا الاقتراح وتصحيح بحثك تلقائيًا</string>
   <string name="file_system_scan_dialog_title">مسح تخزين الكتب؟</string>
   <string name="file_system_scan_dialog_message">سيقوم Kiwix بفحص مساحة تخزين جهازك وإدراج الكتب المتوفرة هنا.</string>
+  <string name="download_timeout_resume_message">تحميل خلفية أندرويد انتهى هل تريد الاستئناف؟</string>
+  <string name="validate_zim_files">التحقق من صحة ملفات ZIM</string>
+  <string name="confirmation_validate_zim_files">هل أنت متأكد من رغبتك في التحقق من صحة ملفات ZIM التالية؟! لا! لا! %s</string>
+  <string name="validating_zim_file">جارٍ التحقق من صحة ملف ZIM…</string>
+  <string name="validating_zim_files">جارٍ التحقق من صحة ملفات ZIM…</string>
 </resources>

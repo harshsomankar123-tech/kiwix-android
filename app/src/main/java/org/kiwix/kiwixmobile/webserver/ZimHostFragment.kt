@@ -52,6 +52,7 @@ import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.hasNotificationPermission
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.isCustomApp
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.isManageExternalStoragePermissionGranted
+import org.kiwix.kiwixmobile.core.extensions.runSafelyInLifecycleScope
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.navigateToAppSettings
 import org.kiwix.kiwixmobile.core.navigateToSettings
@@ -65,7 +66,6 @@ import org.kiwix.kiwixmobile.core.ui.theme.StartServerGreen
 import org.kiwix.kiwixmobile.core.ui.theme.StopServerRed
 import org.kiwix.kiwixmobile.core.utils.ConnectivityReporter
 import org.kiwix.kiwixmobile.core.utils.ServerUtils
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
@@ -91,9 +91,6 @@ class ZimHostFragment : BaseFragment(), ZimHostCallbacks, ZimHostContract.View {
 
   @Inject
   internal lateinit var alertDialogShower: AlertDialogShower
-
-  @Inject
-  lateinit var sharedPreferenceUtil: SharedPreferenceUtil
 
   @Inject
   lateinit var kiwixDataStore: KiwixDataStore
@@ -227,21 +224,23 @@ class ZimHostFragment : BaseFragment(), ZimHostCallbacks, ZimHostContract.View {
   }
 
   private fun startServerButtonClick() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-    ) {
-      if (requireActivity().hasNotificationPermission(sharedPreferenceUtil)) {
-        handleStoragePermissionAndServer()
+    lifecycleScope.runSafelyInLifecycleScope {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+      ) {
+        if (requireActivity().hasNotificationPermission(kiwixDataStore)) {
+          handleStoragePermissionAndServer()
+        } else {
+          notificationPermissionListener.launch(POST_NOTIFICATIONS)
+        }
       } else {
-        notificationPermissionListener.launch(POST_NOTIFICATIONS)
+        handleStoragePermissionAndServer()
       }
-    } else {
-      handleStoragePermissionAndServer()
     }
   }
 
-  private fun handleStoragePermissionAndServer() {
+  private suspend fun handleStoragePermissionAndServer() {
     // we does not require any permission for playStore variant.
-    if (sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove()) {
+    if (kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove()) {
       startStopServer()
       return
     }
@@ -268,8 +267,8 @@ class ZimHostFragment : BaseFragment(), ZimHostCallbacks, ZimHostContract.View {
     }
   }
 
-  private fun handleManageExternalStoragePermissionAndServer() {
-    if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
+  private suspend fun handleManageExternalStoragePermissionAndServer() {
+    if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
       showManageExternalStoragePermissionDialog()
     } else {
       startStopServer()
@@ -352,7 +351,7 @@ class ZimHostFragment : BaseFragment(), ZimHostCallbacks, ZimHostContract.View {
   override fun onResume() {
     super.onResume()
     lifecycleScope.launch {
-      presenter.loadBooks(kiwixDataStore.hostedBooks.first())
+      presenter.loadBooks(kiwixDataStore.hostedBookIds.first())
     }
     if (ServerUtils.isServerStarted) {
       ip = ServerUtils.serverAddress
@@ -366,10 +365,10 @@ class ZimHostFragment : BaseFragment(), ZimHostCallbacks, ZimHostContract.View {
     val hostedBooks = booksList.asSequence()
       .filter(BooksOnDiskListItem::isSelected)
       .filterIsInstance<BookOnDisk>()
-      .map { it.book.title }
+      .map { it.book.id }
       .toSet()
     lifecycleScope.launch {
-      kiwixDataStore.setHostedBooks(hostedBooks)
+      kiwixDataStore.setHostedBookIds(hostedBooks)
     }
   }
 

@@ -18,36 +18,38 @@
 
 package org.kiwix.kiwixmobile.core.downloader.downloadManager
 
+import android.content.Context
 import com.tonyodev.fetch2.Fetch
 import com.tonyodev.fetch2.NetworkType.ALL
 import com.tonyodev.fetch2.NetworkType.WIFI_ONLY
 import com.tonyodev.fetch2.Request
 import kotlinx.coroutines.flow.first
+import org.kiwix.kiwixmobile.core.CoreApp
 import org.kiwix.kiwixmobile.core.downloader.DownloadRequester
 import org.kiwix.kiwixmobile.core.downloader.model.DownloadRequest
 import org.kiwix.kiwixmobile.core.utils.AUTO_RETRY_MAX_ATTEMPTS
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import javax.inject.Inject
 
 class DownloadManagerRequester @Inject constructor(
   private val fetch: Fetch,
-  private val sharedPreferenceUtil: SharedPreferenceUtil,
-  private val kiwixDataStore: KiwixDataStore
+  private val kiwixDataStore: KiwixDataStore,
+  private val context: Context
 ) : DownloadRequester {
   override suspend fun enqueue(downloadRequest: DownloadRequest): Long {
-    val isWifiOnlyNetwork = kiwixDataStore.wifiOnly.first()
-    val request = downloadRequest.toFetchRequest(sharedPreferenceUtil, isWifiOnlyNetwork)
+    val request = downloadRequest.toFetchRequest(kiwixDataStore)
     fetch.enqueue(request)
     return request.id.toLong()
   }
 
   override fun cancel(downloadId: Long) {
     fetch.delete(downloadId.toInt())
+    startDownloadMonitorService()
   }
 
   override fun retryDownload(downloadId: Long) {
     fetch.retry(downloadId.toInt())
+    startDownloadMonitorService()
   }
 
   override fun pauseResumeDownload(downloadId: Long, isPause: Boolean) {
@@ -56,14 +58,16 @@ class DownloadManagerRequester @Inject constructor(
     } else {
       fetch.pause(downloadId.toInt())
     }
+    startDownloadMonitorService()
+  }
+
+  override fun startDownloadMonitorService() {
+    (context as CoreApp).getMainActivity().startDownloadMonitorServiceIfOngoingDownloads()
   }
 }
 
-private fun DownloadRequest.toFetchRequest(
-  sharedPreferenceUtil: SharedPreferenceUtil,
-  isWifiOnlyNetwork: Boolean
-) =
-  Request("$uri", getDestination(sharedPreferenceUtil)).apply {
-    networkType = if (isWifiOnlyNetwork) WIFI_ONLY else ALL
+private suspend fun DownloadRequest.toFetchRequest(kiwixDataStore: KiwixDataStore) =
+  Request("$uri", getDestination(kiwixDataStore)).apply {
+    networkType = if (kiwixDataStore.wifiOnly.first()) WIFI_ONLY else ALL
     autoRetryMaxAttempts = AUTO_RETRY_MAX_ATTEMPTS
   }

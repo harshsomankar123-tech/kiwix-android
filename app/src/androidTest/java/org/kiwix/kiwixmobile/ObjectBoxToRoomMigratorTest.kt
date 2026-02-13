@@ -19,9 +19,9 @@
 package org.kiwix.kiwixmobile
 
 import android.content.Context
-import androidx.core.content.edit
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
-import androidx.preference.PreferenceManager
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -49,8 +49,6 @@ import org.kiwix.kiwixmobile.KiwixRoomDatabaseTest.Companion.getHistoryItem
 import org.kiwix.kiwixmobile.KiwixRoomDatabaseTest.Companion.getNoteListItem
 import org.kiwix.kiwixmobile.core.data.KiwixRoomDatabase
 import org.kiwix.kiwixmobile.core.page.notes.adapter.NoteListItem
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.main.KiwixMainActivity
 import org.kiwix.kiwixmobile.migration.data.ObjectBoxToRoomMigrator
@@ -80,30 +78,22 @@ class ObjectBoxToRoomMigratorTest {
       }
       waitForIdle()
     }
-    val kiwixDataStore = KiwixDataStore(context).apply {
+    KiwixDataStore(context).apply {
       lifeCycleScope.launch {
         setWifiOnly(false)
         setIntroShown()
         setPrefLanguage("en")
         setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setIsPlayStoreBuild(true)
+        setPrefIsTest(true)
       }
-    }
-    PreferenceManager.getDefaultSharedPreferences(context).edit {
-      putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-      putBoolean(SharedPreferenceUtil.IS_PLAY_STORE_BUILD, true)
-      putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-      putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
     }
     ActivityScenario.launch(KiwixMainActivity::class.java).apply {
       moveToState(Lifecycle.State.RESUMED)
       onActivity {
-        runBlocking {
-          LanguageUtils.handleLocaleChange(
-            it,
-            "en",
-            kiwixDataStore
-          )
-        }
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
         it.navigate(KiwixDestination.Library.route)
       }
     }

@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.extensions.isFileExist
 import org.kiwix.kiwixmobile.core.extensions.toast
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.files.FileUtils
 import org.kiwix.kiwixmobile.nav.destination.library.local.ProcessSelectedZimFilesForStandalone
 import org.kiwix.kiwixmobile.nav.destination.library.local.SelectedZimFileCallback
@@ -54,7 +54,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProcessSelectedZimFilesForStandaloneTest {
   private lateinit var processSelectedZimFiles: ProcessSelectedZimFilesForStandalone
-  private val sharedPreferenceUtil: SharedPreferenceUtil = mockk(relaxed = true)
+  private val kiwixDataStore: KiwixDataStore = mockk(relaxed = true)
   private val activity: Activity = mockk(relaxed = true)
   private val selectedZimFileCallback: SelectedZimFileCallback = mockk(relaxed = true)
 
@@ -72,7 +72,7 @@ class ProcessSelectedZimFilesForStandaloneTest {
     testScope = TestScope(testDispatcher)
 
     processSelectedZimFiles = ProcessSelectedZimFilesForStandalone(
-      sharedPreferenceUtil,
+      kiwixDataStore,
       activity
     )
     processSelectedZimFiles.setSelectedZimFileCallback(selectedZimFileCallback)
@@ -81,7 +81,7 @@ class ProcessSelectedZimFilesForStandaloneTest {
   @Test
   fun `canHandleUris should return true when not play store build with android 11 or above`() =
     testScope.runTest {
-      every { sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove() } returns false
+      coEvery { kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove() } returns false
 
       val result = processSelectedZimFiles.canHandleUris()
 
@@ -91,7 +91,7 @@ class ProcessSelectedZimFilesForStandaloneTest {
   @Test
   fun `canHandleUris should return false when play store build with android 11 or above`() =
     testScope.runTest {
-      every { sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove() } returns true
+      coEvery { kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove() } returns true
 
       val result = processSelectedZimFiles.canHandleUris()
 

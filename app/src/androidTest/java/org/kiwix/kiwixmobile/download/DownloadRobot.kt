@@ -28,8 +28,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ActivityScenario
 import applyWithViewHierarchyPrinting
 import org.kiwix.kiwixmobile.BaseRobot
+import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.R.string
 import org.kiwix.kiwixmobile.core.page.SEARCH_ICON_TESTING_TAG
 import org.kiwix.kiwixmobile.core.ui.components.TOOLBAR_TITLE_TESTING_TAG
@@ -192,16 +194,22 @@ class DownloadRobot : BaseRobot() {
 
   fun assertDownloadPaused(
     composeTestRule: ComposeContentTestRule,
-    kiwixMainActivity: KiwixMainActivity
+    scenario: ActivityScenario<KiwixMainActivity>
   ) {
-    composeTestRule.apply {
-      waitUntilTimeout(TestUtils.TEST_PAUSE_MS_FOR_DOWNLOAD_TEST.toLong())
-      waitUntil(TestUtils.TEST_PAUSE_MS_FOR_DOWNLOAD_TEST.toLong()) {
-        composeTestRule.onAllNodesWithTag(DOWNLOADING_STATE_TEXT_TESTING_TAG)[0]
-          .assertTextEquals(kiwixMainActivity.getString(org.kiwix.kiwixmobile.core.R.string.paused_state))
-          .isDisplayed()
+    testFlakyView({
+      composeTestRule.apply {
+        waitForIdle()
+        var pauseState = ""
+        scenario.onActivity { activity ->
+          pauseState = activity.getString(R.string.paused_state)
+        }
+        waitUntil(TestUtils.TEST_PAUSE_MS_FOR_DOWNLOAD_TEST.toLong()) {
+          composeTestRule.onAllNodesWithTag(DOWNLOADING_STATE_TEXT_TESTING_TAG)[0]
+            .assertTextEquals(pauseState)
+            .isDisplayed()
+        }
       }
-    }
+    })
   }
 
   fun resumeDownload(composeTestRule: ComposeContentTestRule) {

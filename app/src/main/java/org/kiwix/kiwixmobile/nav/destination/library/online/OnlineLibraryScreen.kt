@@ -56,12 +56,12 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.kiwix.kiwixmobile.core.R.string
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.FIVE
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
 import org.kiwix.kiwixmobile.core.extensions.hideKeyboardOnLazyColumnScroll
 import org.kiwix.kiwixmobile.core.main.reader.OnBackPressed
 import org.kiwix.kiwixmobile.core.ui.components.ContentLoadingProgressBar
@@ -83,6 +83,8 @@ import org.kiwix.kiwixmobile.core.utils.ComposeDimens.FOUR_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.SIXTEEN_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.SIX_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.THREE_DP
+import org.kiwix.kiwixmobile.core.utils.FIVE
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.zimManager.libraryView.LibraryListItem
 import org.kiwix.kiwixmobile.zimManager.libraryView.LibraryListItem.DividerItem
 
@@ -92,6 +94,7 @@ const val ONLINE_LIBRARY_SEARCH_VIEW_CLOSE_BUTTON_TESTING_TAG =
 const val NO_CONTENT_VIEW_TEXT_TESTING_TAG = "noContentViewTextTestingTag"
 const val SHOW_FETCHING_LIBRARY_LAYOUT_TESTING_TAG = "showFetchingLibraryLayoutTestingTag"
 const val ONLINE_DIVIDER_ITEM_TEXT_TESTING_TAG = "onlineDividerItemTextTag"
+const val LOAD_MORE_DELAY = 150L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("ComposableLambdaParameterNaming")
@@ -183,6 +186,7 @@ private fun OnlineLibraryScreenContent(
   }
 }
 
+@OptIn(FlowPreview::class)
 @Composable
 private fun OnlineLibraryList(state: OnlineLibraryScreenState, lazyListState: LazyListState) {
   LazyColumn(
@@ -215,7 +219,11 @@ private fun OnlineLibraryList(state: OnlineLibraryScreenState, lazyListState: La
     }
     showLoadMoreProgressBar(state.isLoadingMoreItem)
   }
-
+  LaunchedEffect(state.onlineLibraryList) {
+    if (!state.isLoadingMoreItem) {
+      lazyListState.scrollToItem(ZERO)
+    }
+  }
   LaunchedEffect(lazyListState, state.onlineLibraryList) {
     snapshotFlow { lazyListState.layoutInfo }
       .combine(
@@ -226,6 +234,7 @@ private fun OnlineLibraryList(state: OnlineLibraryScreenState, lazyListState: La
         val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: ZERO
         Triple(bookItems, totalItems, lastVisibleItemIndex)
       }
+      .debounce(LOAD_MORE_DELAY)
       .distinctUntilChanged()
       .collect { (bookItems, totalItems, lastVisibleItemIndex) ->
         if (bookItems.isNotEmpty() && lastVisibleItemIndex >= totalItems.minus(FIVE)) {

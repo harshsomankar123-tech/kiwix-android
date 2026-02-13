@@ -20,11 +20,11 @@ package org.kiwix.kiwixmobile.language
 import android.Manifest
 import android.app.Instrumentation
 import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -39,7 +39,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import leakcanary.LeakAssertions
 import org.hamcrest.Matchers.anyOf
 import org.junit.Before
@@ -48,8 +47,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
@@ -95,7 +92,7 @@ class LanguageFragmentTest {
       }
       waitForIdle()
     }
-    val kiwixDataStore = KiwixDataStore(
+    KiwixDataStore(
       instrumentation.targetContext.applicationContext
     ).apply {
       lifeCycleScope.launch {
@@ -103,25 +100,16 @@ class LanguageFragmentTest {
         setIntroShown()
         setPrefLanguage("en")
         setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setPrefIsTest(true)
       }
     }
-    PreferenceManager.getDefaultSharedPreferences(instrumentation.targetContext.applicationContext)
-      .edit {
-        putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-        putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-        putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
-      }
     ActivityScenario.launch(KiwixMainActivity::class.java).apply {
       moveToState(Lifecycle.State.RESUMED)
       onActivity {
         kiwixMainActivity = it
-        runBlocking {
-          handleLocaleChange(
-            it,
-            "en",
-            kiwixDataStore
-          )
-        }
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
       }
     }
     val accessibilityValidator = AccessibilityValidator().setRunChecksFromRootView(true)

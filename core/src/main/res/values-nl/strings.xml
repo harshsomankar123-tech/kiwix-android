@@ -25,6 +25,8 @@
   <string name="menu_support_kiwix">Steun Kiwix</string>
   <string name="menu_support_kiwix_for_custom_apps">Ondersteun %s</string>
   <string name="menu_about_app">Over de app %s</string>
+  <string name="external_redirect_message">U wordt nu naar ons %s doorverwezen.</string>
+  <string name="support_donation_platform">donatieplatform</string>
   <string name="menu_wifi_hotspot">WiFi-hotspot</string>
   <string name="save_media">Media opslaan</string>
   <string name="save_media_error">Er is een fout opgetreden bij het opslaan van de media!</string>
@@ -406,4 +408,9 @@
   <string name="suggested_search_icon_description">Tik om deze suggestie te gebruiken en uw zoekopdracht automatisch te corrigeren</string>
   <string name="file_system_scan_dialog_title">De opslag op boeken doorlichten?</string>
   <string name="file_system_scan_dialog_message">Kiwix tast de opslagruimte van uw apparaat af en geeft hier een overzicht van de beschikbare boeken.</string>
+  <string name="download_timeout_resume_message">De achtergronddownload van Android is verlopen. Wilt u verdergaan?</string>
+  <string name="validate_zim_files">ZIM-bestanden valideren</string>
+  <string name="confirmation_validate_zim_files">Weet u zeker dat u de volgende ZIM-bestanden wilt valideren?\n\n%s</string>
+  <string name="validating_zim_file">ZIM-bestand valideren…</string>
+  <string name="validating_zim_files">ZIM-bestanden valideren…</string>
 </resources>

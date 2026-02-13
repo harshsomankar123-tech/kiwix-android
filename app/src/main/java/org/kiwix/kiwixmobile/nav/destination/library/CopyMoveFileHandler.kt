@@ -44,10 +44,11 @@ import eu.mhutti1.utils.storage.StorageDevice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.kiwix.kiwixmobile.core.R
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.extensions.deleteFile
 import org.kiwix.kiwixmobile.core.extensions.isFileExist
 import org.kiwix.kiwixmobile.core.reader.ZimReaderSource
@@ -60,7 +61,7 @@ import org.kiwix.kiwixmobile.core.utils.ComposeDimens.EIGHT_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.SIXTEEN_DP
 import org.kiwix.kiwixmobile.core.utils.EXTERNAL_SELECT_POSITION
 import org.kiwix.kiwixmobile.core.utils.INTERNAL_SELECT_POSITION
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.KiwixDialog
 import org.kiwix.kiwixmobile.core.utils.files.FileUtils
@@ -83,7 +84,7 @@ const val COPY_MOVE_DIALOG_TITLE_TESTING_TAG = "copyMoveDialogTitleTestingTag"
 
 class CopyMoveFileHandler @Inject constructor(
   private val activity: Activity,
-  private val sharedPreferenceUtil: SharedPreferenceUtil,
+  private val kiwixDataStore: KiwixDataStore,
   private val storageCalculator: StorageCalculator,
   private val fat32Checker: Fat32Checker
 ) {
@@ -140,7 +141,7 @@ class CopyMoveFileHandler @Inject constructor(
     if (getStorageDeviceList().isEmpty()) {
       showPreparingCopyMoveDialog()
     }
-    if (sharedPreferenceUtil.shouldShowStorageSelectionDialog && getStorageDeviceList().size > 1) {
+    if (kiwixDataStore.shouldShowStorageSelectionDialogOnCopyMove.first() && getStorageDeviceList().size > 1) {
       // Show dialog to select storage if more than one storage device is available, and user
       // have not configured the storage yet.
       hidePreparingCopyMoveDialog()
@@ -151,7 +152,7 @@ class CopyMoveFileHandler @Inject constructor(
         // to true. This allows the storage configuration dialog to be shown again if the
         // user removes an external storage device (like an SD card) and then reinserts it.
         // This ensures they are prompted to configure storage settings upon SD card reinsertion.
-        sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
+        kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true)
       }
       hidePreparingCopyMoveDialog()
       if (validateZimFileCanCopyOrMove()) {
@@ -189,10 +190,10 @@ class CopyMoveFileHandler @Inject constructor(
 
   fun copyMoveZIMFileInSelectedStorage(storageDevice: StorageDevice) {
     lifecycleScope?.launch {
-      sharedPreferenceUtil.apply {
-        shouldShowStorageSelectionDialog = false
-        putPrefStorage(sharedPreferenceUtil.getPublicDirectoryPath(storageDevice.name))
-        putStoragePosition(
+      kiwixDataStore.apply {
+        setShowStorageSelectionDialogOnCopyMove(false)
+        setSelectedStorage(kiwixDataStore.getPublicDirectoryPath(storageDevice.name))
+        setSelectedStoragePosition(
           if (storageDevice.isInternal) {
             INTERNAL_SELECT_POSITION
           } else {
@@ -221,22 +222,23 @@ class CopyMoveFileHandler @Inject constructor(
     availableSpace < (selectedFile?.length() ?: 0L)
 
   suspend fun validateZimFileCanCopyOrMove(
-    file: File = File(sharedPreferenceUtil.prefStorage)
+    file: File? = null
   ): Boolean {
+    val storageFile = file ?: File(kiwixDataStore.selectedStorage.first())
     hidePreparingCopyMoveDialog() // hide the dialog if already showing
-    val availableSpace = storageCalculator.availableBytes(file)
+    val availableSpace = storageCalculator.availableBytes(storageFile)
     if (hasNotSufficientStorageSpace(availableSpace)) {
       fileCopyMoveCallback?.insufficientSpaceInStorage(availableSpace)
       return false
     }
     return when (fat32Checker.fileSystemStates.value) {
       DetectingFileSystem -> {
-        handleDetectingFileSystemState()
+        handleDetectingFileSystemState(storageFile)
         false
       }
 
       CannotWrite4GbFile -> {
-        handleCannotWrite4GbFileState()
+        handleCannotWrite4GbFileState(storageFile)
         false
       }
 
@@ -244,18 +246,18 @@ class CopyMoveFileHandler @Inject constructor(
     }
   }
 
-  suspend fun handleDetectingFileSystemState() {
+  suspend fun handleDetectingFileSystemState(storageFile: File) {
     if (isBookLessThan4GB()) {
-      performCopyMoveOperationIfSufficientSpaceAvailable()
+      performCopyMoveOperationIfSufficientSpaceAvailable(storageFile)
     } else {
       showPreparingCopyMoveDialog()
       observeFileSystemState()
     }
   }
 
-  suspend fun handleCannotWrite4GbFileState() {
+  suspend fun handleCannotWrite4GbFileState(storageFile: File) {
     if (isBookLessThan4GB()) {
-      performCopyMoveOperationIfSufficientSpaceAvailable()
+      performCopyMoveOperationIfSufficientSpaceAvailable(storageFile)
     } else {
       // Show an error dialog indicating the file system limitation
       fileCopyMoveCallback?.filesystemDoesNotSupportedCopyMoveFilesOver4GB()
@@ -274,8 +276,8 @@ class CopyMoveFileHandler @Inject constructor(
     }
   }
 
-  suspend fun performCopyMoveOperationIfSufficientSpaceAvailable() {
-    val availableSpace = storageCalculator.availableBytes(File(sharedPreferenceUtil.prefStorage))
+  suspend fun performCopyMoveOperationIfSufficientSpaceAvailable(storageFile: File) {
+    val availableSpace = storageCalculator.availableBytes(storageFile)
     if (hasNotSufficientStorageSpace(availableSpace)) {
       fileCopyMoveCallback?.insufficientSpaceInStorage(availableSpace)
     } else {
@@ -354,7 +356,7 @@ class CopyMoveFileHandler @Inject constructor(
           tryMoveWithDocumentContract(
             sourceUri,
             parentUri,
-            DocumentFile.fromFile(File(sharedPreferenceUtil.prefStorage)).uri
+            DocumentFile.fromFile(File(kiwixDataStore.selectedStorage.first())).uri
           )
         } ?: run {
           copyFile(sourceUri, destinationFile)
@@ -534,7 +536,7 @@ class CopyMoveFileHandler @Inject constructor(
     }
 
   suspend fun getDestinationFile(): File {
-    val root = File(sharedPreferenceUtil.prefStorage)
+    val root = File(kiwixDataStore.selectedStorage.first())
     val fileName = selectedFile?.name.orEmpty()
 
     val destinationFile = sequence {

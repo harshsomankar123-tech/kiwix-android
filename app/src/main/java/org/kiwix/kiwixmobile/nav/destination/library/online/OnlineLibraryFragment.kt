@@ -61,6 +61,7 @@ import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
 import org.kiwix.kiwixmobile.core.data.remote.KiwixService.Companion.ITEMS_PER_PAGE
 import org.kiwix.kiwixmobile.core.downloader.Downloader
+import org.kiwix.kiwixmobile.core.downloader.model.DownloadState
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.hasNotificationPermission
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.isManageExternalStoragePermissionGranted
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.navigate
@@ -68,6 +69,7 @@ import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.requestNotificat
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.viewModel
 import org.kiwix.kiwixmobile.core.extensions.closeKeyboard
 import org.kiwix.kiwixmobile.core.extensions.isKeyboardVisible
+import org.kiwix.kiwixmobile.core.extensions.runSafelyInLifecycleScope
 import org.kiwix.kiwixmobile.core.extensions.snack
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.extensions.update
@@ -85,7 +87,7 @@ import org.kiwix.kiwixmobile.core.utils.INTERNAL_SELECT_POSITION
 import org.kiwix.kiwixmobile.core.utils.NetworkUtils
 import org.kiwix.kiwixmobile.core.utils.REQUEST_POST_NOTIFICATION_PERMISSION
 import org.kiwix.kiwixmobile.core.utils.REQUEST_STORAGE_PERMISSION
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
@@ -103,14 +105,13 @@ import org.kiwix.kiwixmobile.zimManager.libraryView.LibraryListItem
 import javax.inject.Inject
 
 const val LANGUAGE_MENU_ICON_TESTING_TAG = "languageMenuIconTestingTag"
+const val CATEGORY_MENU_ICON_TESTING_TAG = "categoryMenuIconTestingTag"
 
 @Suppress("LargeClass")
 class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
   @Inject lateinit var conMan: ConnectivityManager
 
   @Inject lateinit var downloader: Downloader
-
-  @Inject lateinit var sharedPreferenceUtil: SharedPreferenceUtil
 
   @Inject lateinit var kiwixDataStore: KiwixDataStore
 
@@ -222,7 +223,7 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
       }
       downloader.pauseResumeDownload(
         item.downloadId,
-        item.downloadState.toReadableState(context) == getString(string.paused_state)
+        item.downloadState == DownloadState.Paused
       )
     }
   }
@@ -299,19 +300,21 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
 
   private fun getOnlineLibraryRequest(): OnlineLibraryRequest = OnlineLibraryRequest(
     null,
-    null,
+    runBlocking {
+      kiwixDataStore.selectedOnlineContentCategory.first().takeUnless { it.isBlank() }
+    },
     runBlocking {
       kiwixDataStore.selectedOnlineContentLanguage.first().takeUnless { it.isBlank() }
     },
     false,
-    1
+    ZERO
   )
 
   private fun observeViewModelData() {
     zimManageViewModel.apply {
       // Observe when library items changes.
       libraryItems
-        .onEach { onLibraryItemsChange(it) }
+        .onEach { onLibraryItemsChange(it.items) }
         .launchIn(viewLifecycleOwner.lifecycleScope)
       // Observe when online library downloading.
       onlineLibraryDownloading
@@ -397,6 +400,13 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
       else -> null // Handle the case when both conditions are false
     },
     ActionMenuItem(
+      IconItem.Drawable(drawable.ic_category),
+      org.kiwix.kiwixmobile.R.string.select_category,
+      { onCategoryMenuIconClick() },
+      isEnabled = true,
+      testingTag = CATEGORY_MENU_ICON_TESTING_TAG
+    ),
+    ActionMenuItem(
       IconItem.Drawable(drawable.ic_language_white_24dp),
       string.pref_language_chooser,
       { onLanguageMenuIconClick() },
@@ -404,6 +414,16 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
       testingTag = LANGUAGE_MENU_ICON_TESTING_TAG
     )
   )
+
+  private fun onCategoryMenuIconClick() {
+    val fragmentTransaction = requireActivity().supportFragmentManager.beginTransaction()
+    val previousInstance =
+      requireActivity().supportFragmentManager.findFragmentByTag(ONLINE_CATEGORY_DIALOG_TAG)
+    if (previousInstance == null) {
+      val dialogFragment = OnlineCategoryDialog()
+      dialogFragment.show(fragmentTransaction, ONLINE_CATEGORY_DIALOG_TAG)
+    }
+  }
 
   private fun onLanguageMenuIconClick() {
     requireActivity().navigate(KiwixDestination.Language.route)
@@ -600,20 +620,20 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
     }
   }
 
-  private fun storeDeviceInPreferences(
+  private suspend fun storeDeviceInPreferences(
     storageDevice: StorageDevice
   ) {
-    sharedPreferenceUtil.showStorageOption = false
-    sharedPreferenceUtil.putPrefStorage(
-      sharedPreferenceUtil.getPublicDirectoryPath(storageDevice.name)
-    )
-    sharedPreferenceUtil.putStoragePosition(
-      if (storageDevice.isInternal) {
-        INTERNAL_SELECT_POSITION
-      } else {
-        EXTERNAL_SELECT_POSITION
-      }
-    )
+    kiwixDataStore.apply {
+      setShowStorageOption(false)
+      setSelectedStorage(kiwixDataStore.getPublicDirectoryPath(storageDevice.name))
+      setSelectedStoragePosition(
+        if (storageDevice.isInternal) {
+          INTERNAL_SELECT_POSITION
+        } else {
+          EXTERNAL_SELECT_POSITION
+        }
+      )
+    }
     clickOnBookItem()
   }
 
@@ -628,8 +648,8 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
     }
   }
 
-  private fun checkExternalStorageWritePermission(): Boolean {
-    if (!sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove()) {
+  private suspend fun checkExternalStorageWritePermission(): Boolean {
+    if (!kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove()) {
       return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         true
       } else {
@@ -681,8 +701,10 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
       permissions[0] == Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) {
       if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-        if (!sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove()) {
-          checkExternalStorageWritePermission()
+        lifecycleScope.launch {
+          if (!kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove()) {
+            checkExternalStorageWritePermission()
+          }
         }
       }
     } else if (requestCode == REQUEST_POST_NOTIFICATION_PERMISSION &&
@@ -706,7 +728,7 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
     lifecycleScope.launch {
       if (checkExternalStorageWritePermission()) {
         downloadBookItem = item
-        if (requireActivity().hasNotificationPermission(sharedPreferenceUtil)) {
+        if (requireActivity().hasNotificationPermission(kiwixDataStore)) {
           when {
             isNotConnected -> {
               noInternetSnackbar()
@@ -715,7 +737,7 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
 
             noWifiWithWifiOnlyPreferenceSet() -> {
               alertDialogShower.show(KiwixDialog.YesNoDialog.WifiOnly, {
-                lifecycleScope.launch {
+                lifecycleScope.runSafelyInLifecycleScope {
                   kiwixDataStore.setWifiOnly(false)
                   clickOnBookItem()
                 }
@@ -724,20 +746,17 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
             }
 
             else ->
-              if (sharedPreferenceUtil.showStorageOption) {
+              if (kiwixDataStore.showStorageOption.first()) {
                 // Show the storage selection dialog for configuration if there is an SD card available.
                 if (getStorageDeviceList().size > 1) {
                   showStorageSelectDialog(getStorageDeviceList())
                 } else {
                   // If only internal storage is available, proceed with the ZIM file download directly.
                   // Displaying a configuration dialog is unnecessary in this case.
-                  sharedPreferenceUtil.showStorageOption = false
+                  kiwixDataStore.setShowStorageOption(false)
                   onBookItemClick(item)
                 }
-              } else if (!requireActivity().isManageExternalStoragePermissionGranted(
-                  sharedPreferenceUtil
-                )
-              ) {
+              } else if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
                 showManageExternalStoragePermissionDialog()
               } else {
                 availableSpaceCalculator.hasAvailableSpaceFor(
@@ -778,8 +797,8 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
       }
       .show(parentFragmentManager, getString(string.choose_storage_to_download_book))
 
-  private fun clickOnBookItem() {
-    if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
+  private suspend fun clickOnBookItem() {
+    if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
       showManageExternalStoragePermissionDialog()
     } else {
       downloadBookItem?.let(::onBookItemClick)

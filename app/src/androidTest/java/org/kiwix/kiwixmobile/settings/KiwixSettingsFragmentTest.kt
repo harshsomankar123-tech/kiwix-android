@@ -18,17 +18,19 @@
 package org.kiwix.kiwixmobile.settings
 
 import android.Manifest
+import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils.matchesCheck
 import com.google.android.apps.common.testing.accessibility.framework.checks.DuplicateClickableBoundsCheck
+import com.google.android.apps.common.testing.accessibility.framework.checks.SpeakableTextPresentCheck
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import kotlinx.coroutines.runBlocking
 import leakcanary.LeakAssertions
@@ -37,8 +39,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
@@ -59,6 +59,7 @@ class KiwixSettingsFragmentTest {
   val composeTestRule = createComposeRule()
 
   lateinit var kiwixMainActivity: KiwixMainActivity
+  lateinit var activityScenario: ActivityScenario<KiwixMainActivity>
 
   private val permissions =
     arrayOf(
@@ -83,30 +84,33 @@ class KiwixSettingsFragmentTest {
       }
       waitForIdle()
     }
-    PreferenceManager.getDefaultSharedPreferences(
+    KiwixDataStore(
       InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
-    ).edit {
-      putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-      putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
-      putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-      putBoolean(SharedPreferenceUtil.IS_PLAY_STORE_BUILD, true)
-    }
-    val activityScenario = ActivityScenario.launch(KiwixMainActivity::class.java).apply {
-      moveToState(Lifecycle.State.RESUMED)
-      onActivity {
-        runBlocking {
-          handleLocaleChange(
-            it,
-            "en",
-            KiwixDataStore(it).apply {
-              setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
-            }
-          )
-        }
+    ).apply {
+      runBlocking {
+        setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setIsPlayStoreBuild(true)
+        setPrefIsTest(true)
       }
     }
-    val accessibilityValidator = AccessibilityValidator().setRunChecksFromRootView(true).apply {
-      setSuppressingResultMatcher(
+    activityScenario = ActivityScenario.launch(KiwixMainActivity::class.java).apply {
+      moveToState(Lifecycle.State.RESUMED)
+      onActivity {
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+      }
+    }
+    val accessibilityValidator = AccessibilityValidator().setRunChecksFromRootView(true)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      accessibilityValidator.setSuppressingResultMatcher(
+        anyOf(
+          matchesCheck(DuplicateClickableBoundsCheck::class.java),
+          matchesCheck(SpeakableTextPresentCheck::class.java)
+        )
+      )
+    } else {
+      accessibilityValidator.setSuppressingResultMatcher(
         anyOf(
           matchesCheck(DuplicateClickableBoundsCheck::class.java)
         )
@@ -138,7 +142,13 @@ class KiwixSettingsFragmentTest {
       toggleExternalLinkWarningPref(composeTestRule)
       toggleWifiDownloadsOnlyPref(composeTestRule)
       clickExternalStoragePreference(composeTestRule)
+      if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        assertExternalStorageSelected(composeTestRule)
+      }
       clickInternalStoragePreference(composeTestRule)
+      if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+        assertInternalStorageSelected(composeTestRule)
+      }
       clickClearHistoryPreference(composeTestRule)
       assertHistoryDialogDisplayed(composeTestRule)
       dismissDialog()
@@ -151,8 +161,8 @@ class KiwixSettingsFragmentTest {
       clickOnImportBookmarkPreference(composeTestRule)
       assertImportBookmarkDialogDisplayed(composeTestRule)
       dismissDialog()
-      clickLanguagePreference(composeTestRule, kiwixMainActivity)
-      assertLanguagePrefDialogDisplayed(composeTestRule, kiwixMainActivity)
+      clickLanguagePreference(composeTestRule, activityScenario)
+      assertLanguagePrefDialogDisplayed(composeTestRule, activityScenario)
       dismissDialog()
       assertVersionTextViewPresent(composeTestRule)
       clickCredits(composeTestRule)

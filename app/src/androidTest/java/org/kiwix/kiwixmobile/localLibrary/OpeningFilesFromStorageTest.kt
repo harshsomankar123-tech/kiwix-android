@@ -18,29 +18,32 @@
 
 package org.kiwix.kiwixmobile.localLibrary
 
+import android.app.Activity
+import android.app.Instrumentation
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.intent.Intents
+import androidx.test.espresso.intent.Intents.intending
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils.matchesCheck
 import com.google.android.apps.common.testing.accessibility.framework.checks.DuplicateClickableBoundsCheck
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matchers.anyOf
@@ -50,8 +53,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.jupiter.api.fail
 import org.kiwix.kiwixmobile.BaseActivityTest
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
@@ -61,7 +62,9 @@ import org.kiwix.kiwixmobile.testutils.RetryRule
 import org.kiwix.kiwixmobile.testutils.TestUtils
 import org.kiwix.kiwixmobile.ui.KiwixDestination
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.OutputStream
 
 class OpeningFilesFromStorageTest : BaseActivityTest() {
@@ -71,8 +74,7 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
 
   @get:Rule(order = COMPOSE_TEST_RULE_ORDER)
   val composeTestRule = createComposeRule()
-
-  private lateinit var sharedPreferenceUtil: SharedPreferenceUtil
+  private lateinit var kiwixDataStore: KiwixDataStore
   private lateinit var kiwixMainActivity: KiwixMainActivity
   private lateinit var uiDevice: UiDevice
   private val fileName = "testzim.zim"
@@ -87,32 +89,23 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
       }
       waitForIdle()
     }
-    val kiwixDataStore = KiwixDataStore(context).apply {
+    kiwixDataStore = KiwixDataStore(context).apply {
       lifeCycleScope.launch {
         setWifiOnly(false)
         setIntroShown()
         setPrefLanguage("en")
         setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setIsPlayStoreBuild(true)
+        setPrefIsTest(true)
       }
-    }
-    PreferenceManager.getDefaultSharedPreferences(context).edit {
-      putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-      putBoolean(SharedPreferenceUtil.IS_PLAY_STORE_BUILD, true)
-      putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-      putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
     }
     activityScenario =
       ActivityScenario.launch(KiwixMainActivity::class.java).apply {
         moveToState(Lifecycle.State.RESUMED)
-        sharedPreferenceUtil = SharedPreferenceUtil(context)
         onActivity {
-          runBlocking {
-            handleLocaleChange(
-              it,
-              "en",
-              kiwixDataStore
-            )
-          }
+          AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
         }
       }
     val accessibilityValidator = AccessibilityValidator().setRunChecksFromRootView(true).apply {
@@ -127,7 +120,7 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
 
   @Test
   fun testOpeningFileWithFilePicker() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Build.VERSION.SDK_INT != Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       activityScenario.onActivity {
         kiwixMainActivity = it
         it.navigate(KiwixDestination.Library.route)
@@ -135,11 +128,16 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
       composeTestRule.waitForIdle()
       val uri = copyFileToDownloadsFolder(context, fileName)
       try {
-        sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
+        runBlocking { kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true) }
+        intending(hasAction(Intent.ACTION_CHOOSER))
+          .respondWith(
+            Instrumentation.ActivityResult(
+              Activity.RESULT_OK,
+              Intent().setData(uri)
+            )
+          )
         // open file picker to select a file to test the real scenario.
         composeTestRule.onNodeWithTag(SELECT_FILE_BUTTON_TESTING_TAG).performClick()
-        TestUtils.testFlakyView(uiDevice.findObject(By.textContains(fileName))::click, 10)
-
         copyMoveFileHandler {
           assertCopyMoveDialogDisplayed(composeTestRule)
           clickOnMove(composeTestRule)
@@ -150,17 +148,17 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
       } catch (ignore: Exception) {
         fail("Could not open file from file manager. Original exception = $ignore")
       } finally {
-        deleteAllFilesInDirectory(File(sharedPreferenceUtil.prefStorage))
-        deleteZimFileFromDownloadsFolder(uri!!)
+        deleteAllFilesInDirectory(
+          runBlocking { File(kiwixDataStore.selectedStorage.first()) }
+        )
+        deleteZimFileFromDownloadsFolder(uri)
       }
     }
   }
 
   @Test
   fun testOpeningFileFromFileManager() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-      Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-    ) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       activityScenario.onActivity {
         kiwixMainActivity = it
         it.navigate(KiwixDestination.Library.route)
@@ -168,9 +166,14 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
       composeTestRule.waitForIdle()
       val uri = copyFileToDownloadsFolder(context, fileName)
       try {
-        sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
-        openFileManager()
-        TestUtils.testFlakyView(uiDevice.findObject(By.textContains(fileName))::click, 10)
+        runBlocking { kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true) }
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(uri, "application/octet-stream")
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          setPackage(context.packageName)
+        }
+        ActivityScenario.launch<KiwixMainActivity>(viewIntent).onActivity {}
+        composeTestRule.waitForIdle()
         copyMoveFileHandler {
           assertCopyMoveDialogDisplayed(composeTestRule)
           clickOnMove(composeTestRule)
@@ -181,8 +184,10 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
       } catch (ignore: Exception) {
         fail("Could not open file from file manager. Original exception = $ignore")
       } finally {
-        deleteAllFilesInDirectory(File(sharedPreferenceUtil.prefStorage))
-        deleteZimFileFromDownloadsFolder(uri!!)
+        deleteAllFilesInDirectory(
+          runBlocking { File(kiwixDataStore.selectedStorage.first()) }
+        )
+        deleteZimFileFromDownloadsFolder(uri)
       }
     }
   }
@@ -207,7 +212,7 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
   }
 
   private fun testCopyMoveDialogShowing(uri: Uri) {
-    sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
+    runBlocking { kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true) }
     ActivityScenario.launch<KiwixMainActivity>(
       createDeepLinkIntent(uri)
     ).onActivity {}
@@ -243,13 +248,6 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
     }
   }
 
-  private fun openFileManager() {
-    val intent =
-      context.packageManager.getLaunchIntentForPackage("com.android.documentsui")
-    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-    context.startActivity(intent)
-  }
-
   private fun getSelectedFile(): File {
     val loadFileStream =
       CopyMoveFileHandlerTest::class.java.classLoader.getResourceAsStream(fileName)
@@ -277,32 +275,25 @@ class OpeningFilesFromStorageTest : BaseActivityTest() {
     context: Context,
     fileName: String,
     content: ByteArray = getSelectedFile().readBytes()
-  ): Uri? {
+  ): Uri {
     val contentValues =
       ContentValues().apply {
         put(MediaStore.Downloads.DISPLAY_NAME, fileName)
         put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-        put(MediaStore.Downloads.IS_PENDING, true)
+        put(MediaStore.Downloads.IS_PENDING, 1)
       }
 
     val resolver = context.contentResolver
     val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+      ?: throw FileNotFoundException("Could not write file in Download folder")
 
-    uri?.let {
-      resolver.openOutputStream(uri).use { outputStream ->
-        outputStream?.write(content)
-      }
+    resolver.openOutputStream(uri)?.use {
+      it.write(content)
+    } ?: throw IOException("Could not write content in file")
 
-      contentValues.clear()
-      contentValues.put(MediaStore.Downloads.IS_PENDING, false)
-      resolver.update(uri, contentValues, null, null)
-      MediaScannerConnection.scanFile(
-        context,
-        arrayOf(uri.toString()),
-        arrayOf("application/octet-stream"),
-        null
-      )
-    }
+    contentValues.clear()
+    contentValues.put(MediaStore.Downloads.IS_PENDING, 0)
+    resolver.update(uri, contentValues, null, null)
 
     return uri
   }

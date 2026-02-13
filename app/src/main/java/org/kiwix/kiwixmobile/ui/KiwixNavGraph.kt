@@ -33,25 +33,30 @@ import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commit
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavOptions
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import org.kiwix.kiwixmobile.core.R
+import org.kiwix.kiwixmobile.core.ViewModelFactory
+import org.kiwix.kiwixmobile.core.help.HelpScreenRoute
 import org.kiwix.kiwixmobile.core.main.BOOKMARK_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.DOWNLOAD_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.HELP_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.HELP_SCREEN
 import org.kiwix.kiwixmobile.core.main.HISTORY_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.INTRO_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.LANGUAGE_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.INTRO_SCREEN
+import org.kiwix.kiwixmobile.core.main.LANGUAGE_SCREEN
 import org.kiwix.kiwixmobile.core.main.LOCAL_FILE_TRANSFER_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.LOCAL_LIBRARY_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.NOTES_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.READER_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.SEARCH_FRAGMENT
-import org.kiwix.kiwixmobile.core.main.SETTINGS_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.SETTINGS_SCREEN
 import org.kiwix.kiwixmobile.core.main.ZIM_FILE_URI_KEY
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_NAV_DEEP_LINK
@@ -60,17 +65,19 @@ import org.kiwix.kiwixmobile.core.page.history.HistoryFragment
 import org.kiwix.kiwixmobile.core.page.notes.NotesFragment
 import org.kiwix.kiwixmobile.core.search.NAV_ARG_SEARCH_STRING
 import org.kiwix.kiwixmobile.core.search.SearchFragment
+import org.kiwix.kiwixmobile.core.settings.SettingsScreenRoute
 import org.kiwix.kiwixmobile.core.utils.EXTRA_IS_WIDGET_VOICE
 import org.kiwix.kiwixmobile.core.utils.TAG_FROM_TAB_SWITCHER
-import org.kiwix.kiwixmobile.help.KiwixHelpFragment
-import org.kiwix.kiwixmobile.intro.IntroFragment
-import org.kiwix.kiwixmobile.language.LanguageFragment
+import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
+import org.kiwix.kiwixmobile.help.KiwixHelpViewModel
+import org.kiwix.kiwixmobile.intro.IntroScreenRoute
+import org.kiwix.kiwixmobile.language.LanguageScreenRoute
 import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferFragment
 import org.kiwix.kiwixmobile.localFileTransfer.URIS_KEY
 import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryFragment
 import org.kiwix.kiwixmobile.nav.destination.library.online.OnlineLibraryFragment
 import org.kiwix.kiwixmobile.nav.destination.reader.KiwixReaderFragment
-import org.kiwix.kiwixmobile.settings.KiwixSettingsFragment
+import org.kiwix.kiwixmobile.settings.KiwixSettingsViewModel
 import org.kiwix.kiwixmobile.webserver.ZimHostFragment
 
 @Suppress("LongMethod")
@@ -78,7 +85,9 @@ import org.kiwix.kiwixmobile.webserver.ZimHostFragment
 fun KiwixNavGraph(
   navController: NavHostController,
   startDestination: String,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  viewModelFactory: ViewModelProvider.Factory,
+  alertDialogShower: AlertDialogShower
 ) {
   NavHost(
     navController = navController,
@@ -125,9 +134,15 @@ fun KiwixNavGraph(
       }
     }
     composable(KiwixDestination.Intro.route) {
-      FragmentContainer(R.id.introFragmentContainer) {
-        IntroFragment()
-      }
+      IntroScreenRoute(
+        viewModelFactory = viewModelFactory as ViewModelFactory,
+        navigateToLibrary = {
+          val navOptions = NavOptions.Builder()
+            .setPopUpTo(KiwixDestination.Intro.route, inclusive = true)
+            .build()
+          navController.navigate(KiwixDestination.Library.route, navOptions)
+        }
+      )
     }
     composable(KiwixDestination.History.route) {
       FragmentContainer(R.id.historyFragmentContainer) {
@@ -135,9 +150,10 @@ fun KiwixNavGraph(
       }
     }
     composable(KiwixDestination.Language.route) {
-      FragmentContainer(R.id.languageFragmentContainer) {
-        LanguageFragment()
-      }
+      LanguageScreenRoute(
+        viewModelFactory = viewModelFactory,
+        navigateBack = navController::popBackStack
+      )
     }
     composable(
       KiwixDestination.ZimHost.route,
@@ -148,14 +164,19 @@ fun KiwixNavGraph(
       }
     }
     composable(KiwixDestination.Help.route) {
-      FragmentContainer(R.id.helpFragmentContainer) {
-        KiwixHelpFragment()
-      }
+      val kiwixHelpViewModel: KiwixHelpViewModel = viewModel(factory = viewModelFactory)
+      HelpScreenRoute(
+        navigateBack = navController::popBackStack,
+        helpViewModel = kiwixHelpViewModel
+      )
     }
     composable(KiwixDestination.Settings.route) {
-      FragmentContainer(R.id.settingsFragmentContainer) {
-        KiwixSettingsFragment()
-      }
+      val kiwixSettingsViewModel: KiwixSettingsViewModel = viewModel(factory = viewModelFactory)
+      kiwixSettingsViewModel.setAlertDialog(alertDialogShower)
+      SettingsScreenRoute(
+        kiwixSettingsViewModel,
+        navController::popBackStack
+      )
     }
     composable(
       route = KiwixDestination.Search.route,
@@ -262,12 +283,12 @@ sealed class KiwixDestination(val route: String) {
   object Downloads : KiwixDestination(DOWNLOAD_FRAGMENT)
   object Bookmarks : KiwixDestination(BOOKMARK_FRAGMENT)
   object Notes : KiwixDestination(NOTES_FRAGMENT)
-  object Intro : KiwixDestination(INTRO_FRAGMENT)
+  object Intro : KiwixDestination(INTRO_SCREEN)
   object History : KiwixDestination(HISTORY_FRAGMENT)
-  object Language : KiwixDestination(LANGUAGE_FRAGMENT)
+  object Language : KiwixDestination(LANGUAGE_SCREEN)
   object ZimHost : KiwixDestination(ZIM_HOST_FRAGMENT)
-  object Help : KiwixDestination(HELP_FRAGMENT)
-  object Settings : KiwixDestination(SETTINGS_FRAGMENT)
+  object Help : KiwixDestination(HELP_SCREEN)
+  object Settings : KiwixDestination(SETTINGS_SCREEN)
   object Search : KiwixDestination(
     SEARCH_FRAGMENT +
       "?$NAV_ARG_SEARCH_STRING={$NAV_ARG_SEARCH_STRING}" +

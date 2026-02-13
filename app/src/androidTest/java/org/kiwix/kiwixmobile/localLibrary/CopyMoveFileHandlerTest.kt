@@ -20,12 +20,12 @@ package org.kiwix.kiwixmobile.localLibrary
 
 import android.net.Uri
 import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
 import androidx.test.internal.runner.junit4.statement.UiThreadStatement
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
@@ -33,6 +33,7 @@ import com.google.android.apps.common.testing.accessibility.framework.Accessibil
 import com.google.android.apps.common.testing.accessibility.framework.checks.DuplicateClickableBoundsCheck
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -46,8 +47,6 @@ import org.kiwix.kiwixmobile.BaseActivityTest
 import org.kiwix.kiwixmobile.core.extensions.deleteFile
 import org.kiwix.kiwixmobile.core.extensions.isFileExist
 import org.kiwix.kiwixmobile.core.settings.StorageCalculator
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
@@ -73,8 +72,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
 
   @get:Rule(order = COMPOSE_TEST_RULE_ORDER)
   val composeTestRule = createAndroidComposeRule<KiwixMainActivity>()
-
-  private lateinit var sharedPreferenceUtil: SharedPreferenceUtil
+  private lateinit var kiwixDataStore: KiwixDataStore
   private lateinit var kiwixMainActivity: KiwixMainActivity
   private lateinit var selectedFile: File
   private lateinit var destinationFile: File
@@ -88,32 +86,23 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
       }
       waitForIdle()
     }
-    val kiwixDataStore = KiwixDataStore(context).apply {
+    kiwixDataStore = KiwixDataStore(context).apply {
       lifeCycleScope.launch {
         setWifiOnly(false)
         setIntroShown()
         setPrefLanguage("en")
         setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setIsPlayStoreBuild(true)
+        setPrefIsTest(true)
       }
-    }
-    PreferenceManager.getDefaultSharedPreferences(context).edit {
-      putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-      putBoolean(SharedPreferenceUtil.IS_PLAY_STORE_BUILD, true)
-      putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-      putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
     }
     composeTestRule.apply {
       kiwixMainActivity = activity
       runOnUiThread {
-        sharedPreferenceUtil = SharedPreferenceUtil(kiwixMainActivity)
-        runBlocking {
-          handleLocaleChange(
-            kiwixMainActivity,
-            "en",
-            kiwixDataStore
-          )
-        }
-        parentFile = File(sharedPreferenceUtil.prefStorage)
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+        parentFile = runBlocking { File(kiwixDataStore.selectedStorage.first()) }
       }
       waitForIdle()
     }
@@ -141,7 +130,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
         waitUntilTimeout() // to properly load the library screen.
       }
       // test with first launch
-      sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
+      runBlocking { kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true) }
       showMoveFileToPublicDirectoryDialog(listOf(Uri.fromFile(selectedFile)))
       // should show the permission dialog.
       copyMoveFileHandler {
@@ -207,7 +196,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
         waitUntilTimeout() // to properly load the library screen.
       }
       // test with first launch
-      sharedPreferenceUtil.shouldShowStorageSelectionDialog = true
+      runBlocking { kiwixDataStore.setShowStorageSelectionDialogOnCopyMove(true) }
       showMoveFileToPublicDirectoryDialog(listOf(Uri.fromFile(selectedFile)))
       // should show the permission dialog.
       copyMoveFileHandler {
@@ -326,9 +315,9 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
     deleteAllFilesInDirectory(parentFile)
     val copyMoveFileHandler = CopyMoveFileHandler(
       kiwixMainActivity,
-      sharedPreferenceUtil,
-      StorageCalculator(sharedPreferenceUtil),
-      Fat32Checker(sharedPreferenceUtil, listOf(FileWritingFileSystemChecker()))
+      kiwixDataStore,
+      StorageCalculator(kiwixDataStore),
+      Fat32Checker(kiwixDataStore, listOf(FileWritingFileSystemChecker()))
     ).apply {
       setAlertDialogShower(AlertDialogShower())
     }
@@ -377,9 +366,11 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
         waitForIdle()
         waitUntilTimeout() // to properly load the library screen.
       }
-      sharedPreferenceUtil.apply {
-        shouldShowStorageSelectionDialog = false
-        setIsPlayStoreBuildType(true)
+      runBlocking {
+        kiwixDataStore.apply {
+          setShowStorageSelectionDialogOnCopyMove(false)
+          setIsPlayStoreBuild(true)
+        }
       }
       // test opening images
       showMoveFileToPublicDirectoryDialog(listOf(getInvalidZimFileUri(".jpg")))

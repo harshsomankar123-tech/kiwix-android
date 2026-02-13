@@ -9,6 +9,7 @@
 * Rofiatmustapha12
 * Sabelöga
 * Skalman
+* Stefan2255
 * Susann Schweden
 * Teaparty
 * Technic2
@@ -27,6 +28,9 @@
   <string name="menu_support_kiwix">Stöd Kiwix</string>
   <string name="menu_support_kiwix_for_custom_apps">Stöd %s</string>
   <string name="menu_about_app">Om appen %s</string>
+  <string name="external_redirect_message">Du kommer nu att omdirigeras till vår %s.</string>
+  <string name="support_donation_platform">donationsplattform</string>
+  <string name="about_app_page">om appsidan</string>
   <string name="menu_wifi_hotspot">WiFi Hotspot</string>
   <string name="save_media">Spara media</string>
   <string name="save_media_error">Ett fel uppstod när media skulle sparas!</string>
@@ -404,6 +408,13 @@
   <string name="downloading_state">Laddar ned</string>
   <string name="download_failed_state">Misslyckades</string>
   <string name="searchview_description_clear">Rensa förfrågan</string>
+  <string name="do_you_mean">Menade du:</string>
+  <string name="suggested_search_icon_description">Tryck för att använda det här förslaget och korrigera din sökning automatiskt</string>
   <string name="file_system_scan_dialog_title">Skanna lagringen efter böcker?</string>
   <string name="file_system_scan_dialog_message">Kiwix kommer att skanna din enhets lagring och listar tillgängliga böcker här.</string>
+  <string name="download_timeout_resume_message">Androids bakgrundsnedladdning har gått ut. Vill du återuppta?</string>
+  <string name="validate_zim_files">Validera ZIM-filer</string>
+  <string name="confirmation_validate_zim_files">Är du säker på att du vill validera följande ZIM-filer?\n\n %s</string>
+  <string name="validating_zim_file">Validerar ZIM-filen…</string>
+  <string name="validating_zim_files">Validerar ZIM-filer…</string>
 </resources>

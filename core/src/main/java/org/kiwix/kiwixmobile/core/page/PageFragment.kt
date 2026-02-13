@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.onEach
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.extensions.update
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
 import org.kiwix.kiwixmobile.core.page.adapter.OnItemClickListener
@@ -54,7 +54,6 @@ import org.kiwix.kiwixmobile.core.page.viewmodel.PageViewModel
 import org.kiwix.kiwixmobile.core.ui.components.NavigationIcon
 import org.kiwix.kiwixmobile.core.ui.models.ActionMenuItem
 import org.kiwix.kiwixmobile.core.ui.models.IconItem
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
@@ -67,8 +66,6 @@ abstract class PageFragment : OnItemClickListener, BaseFragment(), FragmentActiv
   abstract val pageViewModel: PageViewModel<*, *>
 
   @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
-
-  @Inject lateinit var sharedPreferenceUtil: SharedPreferenceUtil
 
   @Inject lateinit var kiwixDataStore: KiwixDataStore
 

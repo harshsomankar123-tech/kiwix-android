@@ -120,8 +120,8 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.delay
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.HUNDERED
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
+import org.kiwix.kiwixmobile.core.utils.HUNDERED
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.extensions.update
 import org.kiwix.kiwixmobile.core.main.KiwixWebView
 import org.kiwix.kiwixmobile.core.ui.components.ContentLoadingProgressBar
@@ -175,6 +175,7 @@ const val READER_BOTTOM_BAR_NEXT_SCREEN_BUTTON_TESTING_TAG =
 const val READER_BOTTOM_BAR_HOME_BUTTON_TESTING_TAG = "readerBottomBarHomeButtonTestingTag"
 const val READER_BOTTOM_BAR_TABLE_CONTENT_BUTTON_TESTING_TAG =
   "readerBottomBarTableContentButtonTestingTag"
+const val TTS_CONTROL_STOP_BUTTON_TESTING_TAG = "ttsControlStopButtonTestingTag"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Suppress("ComposableLambdaParameterNaming", "LongMethod", "LongParameterList")
@@ -207,6 +208,17 @@ fun ReaderScreen(
             actionMenuItems,
             topAppBarScrollBehavior,
             navigationIcon
+          )
+        },
+        bottomBar = {
+          BottomAppBarOfReaderScreen(
+            state.bookmarkButtonItem,
+            state.previousPageButtonItem,
+            state.onHomeButtonClick,
+            state.nextPageButtonItem,
+            state.tocButtonItem,
+            state.shouldShowBottomAppBar,
+            bottomAppBarScrollBehavior
           )
         },
         floatingActionButton = { BackToTopFab(state) },
@@ -326,15 +338,6 @@ private fun ReaderContentLayout(
           Column(Modifier.align(Alignment.BottomCenter)) {
             TtsControls(state)
             ShowDonationLayout(state)
-            BottomAppBarOfReaderScreen(
-              state.bookmarkButtonItem,
-              state.previousPageButtonItem,
-              state.onHomeButtonClick,
-              state.nextPageButtonItem,
-              state.tocButtonItem,
-              state.shouldShowBottomAppBar,
-              bottomAppBarScrollBehavior
-            )
           }
         }
       }
@@ -633,6 +636,7 @@ private fun TtsControls(state: ReaderScreenState) {
         modifier = Modifier
           .weight(1f)
           .alpha(TTS_BUTTONS_CONTROL_ALPHA)
+          .semantics { testTag = TTS_CONTROL_STOP_BUTTON_TESTING_TAG }
       ) {
         Text(
           text = stringResource(R.string.stop).uppercase(),
@@ -977,7 +981,9 @@ private fun TabItemCard(
           addView(clickableView)
         }
       },
-      modifier = Modifier.fillMaxSize().semantics { hideFromAccessibility() }
+      modifier = Modifier
+        .fillMaxSize()
+        .semantics { hideFromAccessibility() }
     )
   }
 }

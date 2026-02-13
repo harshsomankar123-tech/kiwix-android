@@ -33,6 +33,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.spyk
 import io.mockk.verify
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -44,7 +45,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.settings.StorageCalculator
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.KiwixDialog
 import org.kiwix.kiwixmobile.nav.destination.library.CopyMoveFileHandler
@@ -59,7 +60,7 @@ class CopyMoveFileHandlerTest {
   private lateinit var fileHandler: CopyMoveFileHandler
 
   private val activity: Activity = mockk(relaxed = true)
-  private val sharedPreferenceUtil: SharedPreferenceUtil = mockk(relaxed = true)
+  private var kiwixDataStore: KiwixDataStore = mockk(relaxed = true)
   private val alertDialogShower: AlertDialogShower = mockk(relaxed = true)
   private val storageCalculator: StorageCalculator = mockk(relaxed = true)
   private val fat32Checker: Fat32Checker = mockk(relaxed = true)
@@ -78,7 +79,7 @@ class CopyMoveFileHandlerTest {
     clearAllMocks()
     fileHandler = CopyMoveFileHandler(
       activity,
-      sharedPreferenceUtil,
+      kiwixDataStore,
       storageCalculator,
       fat32Checker
     ).apply {
@@ -136,7 +137,7 @@ class CopyMoveFileHandlerTest {
     val result = fileHandler.validateZimFileCanCopyOrMove(storageFile)
 
     assertFalse(result)
-    coVerify { fileHandler.handleDetectingFileSystemState() }
+    coVerify { fileHandler.handleDetectingFileSystemState(storageFile) }
   }
 
   @Test
@@ -149,9 +150,8 @@ class CopyMoveFileHandlerTest {
     prepareFileSystemAndFileForMockk(fileSystemState = CannotWrite4GbFile)
 
     val result = fileHandler.validateZimFileCanCopyOrMove(storageFile)
-
     assertFalse(result)
-    coVerify { fileHandler.handleCannotWrite4GbFileState() }
+    coVerify { fileHandler.handleCannotWrite4GbFileState(storageFile) }
   }
 
   @Test
@@ -159,11 +159,11 @@ class CopyMoveFileHandlerTest {
     fileHandler = spyk(fileHandler)
     prepareFileSystemAndFileForMockk()
     every { fileHandler.isBookLessThan4GB() } returns true
-    coEvery { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable() } just Runs
+    coEvery { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable(storageFile) } just Runs
 
-    fileHandler.handleDetectingFileSystemState()
+    fileHandler.handleDetectingFileSystemState(storageFile)
 
-    coVerify { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable() }
+    coVerify { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable(storageFile) }
   }
 
   @Test
@@ -173,7 +173,7 @@ class CopyMoveFileHandlerTest {
     every { fileHandler.isBookLessThan4GB() } returns false
     every { fileHandler.observeFileSystemState() } just Runs
 
-    fileHandler.handleDetectingFileSystemState()
+    fileHandler.handleDetectingFileSystemState(storageFile)
     verify { fileHandler.observeFileSystemState() }
   }
 
@@ -182,11 +182,11 @@ class CopyMoveFileHandlerTest {
     fileHandler = spyk(fileHandler)
     prepareFileSystemAndFileForMockk()
     every { fileHandler.isBookLessThan4GB() } returns true
-    coEvery { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable() } just Runs
+    coEvery { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable(storageFile) } just Runs
 
-    fileHandler.handleCannotWrite4GbFileState()
+    fileHandler.handleCannotWrite4GbFileState(storageFile)
 
-    coVerify { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable() }
+    coVerify { fileHandler.performCopyMoveOperationIfSufficientSpaceAvailable(storageFile) }
   }
 
   @Test
@@ -198,7 +198,7 @@ class CopyMoveFileHandlerTest {
       fileCopyMoveCallback.filesystemDoesNotSupportedCopyMoveFilesOver4GB()
     } just Runs
 
-    fileHandler.handleCannotWrite4GbFileState()
+    fileHandler.handleCannotWrite4GbFileState(storageFile)
 
     verify {
       fileCopyMoveCallback.filesystemDoesNotSupportedCopyMoveFilesOver4GB()
@@ -211,7 +211,7 @@ class CopyMoveFileHandlerTest {
     val storageDeviceList = listOf<StorageDevice>(mockk(), mockk())
     every { fileHandler.showStorageSelectDialog(storageDeviceList) } just Runs
 
-    every { sharedPreferenceUtil.shouldShowStorageSelectionDialog } returns true
+    coEvery { kiwixDataStore.shouldShowStorageSelectionDialogOnCopyMove } returns flowOf(true)
     coEvery { fileHandler.getStorageDeviceList() } returns storageDeviceList
     val positiveButtonClickSlot = slot<() -> Unit>()
     every {
@@ -234,7 +234,7 @@ class CopyMoveFileHandlerTest {
   @Test
   fun shouldNotShowStorageConfigureDialogWhenThereIsOnlyInternalAvailable() = runBlocking {
     fileHandler = spyk(fileHandler)
-    every { sharedPreferenceUtil.shouldShowStorageSelectionDialog } returns true
+    coEvery { kiwixDataStore.shouldShowStorageSelectionDialogOnCopyMove } returns flowOf(true)
     coEvery { fileHandler.getStorageDeviceList() } returns listOf(mockk())
     val positiveButtonClickSlot = slot<() -> Unit>()
     every {
@@ -256,7 +256,7 @@ class CopyMoveFileHandlerTest {
   @Test
   fun showDirectlyCopyMoveDialogAfterFirstLaunch() = runBlocking {
     fileHandler = spyk(fileHandler)
-    every { sharedPreferenceUtil.shouldShowStorageSelectionDialog } returns false
+    coEvery { kiwixDataStore.shouldShowStorageSelectionDialogOnCopyMove } returns flowOf(false)
     coEvery { fileHandler.getStorageDeviceList() } returns listOf(mockk(), mockk())
     coEvery { fileHandler.validateZimFileCanCopyOrMove() } returns true
     prepareFileSystemAndFileForMockk()
@@ -281,7 +281,7 @@ class CopyMoveFileHandlerTest {
     val negativeButtonClickSlot = slot<() -> Unit>()
     fileHandler = spyk(fileHandler)
     coEvery { fileHandler.getStorageDeviceList() } returns listOf(mockk(), mockk())
-    every { sharedPreferenceUtil.shouldShowStorageSelectionDialog } returns false
+    coEvery { kiwixDataStore.shouldShowStorageSelectionDialogOnCopyMove } returns flowOf(false)
     every {
       alertDialogShower.show(
         KiwixDialog.CopyMoveFileToPublicDirectoryDialog(""),
@@ -312,6 +312,8 @@ class CopyMoveFileHandlerTest {
     availableStorageSize: Long = 1000L,
     fileSystemState: Fat32Checker.FileSystemState = CanWrite4GbFile
   ) {
+    every { kiwixDataStore.selectedStorage } returns flowOf(storagePath)
+    every { kiwixDataStore.selectedStorage } answers { flowOf(storagePath) }
     every { storageFile.exists() } returns storageFileExist
     every { storageFile.freeSpace } returns freeSpaceInStorage
     every { storageFile.path } returns storagePath

@@ -39,10 +39,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProviders
 import androidx.navigation.NavOptions
+import kotlinx.coroutines.flow.first
 import org.kiwix.kiwixmobile.core.di.components.CoreActivityComponent
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
 import org.kiwix.kiwixmobile.core.utils.REQUEST_POST_NOTIFICATION_PERMISSION
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 
 object ActivityExtensions {
   private val Activity.coreMainActivity: CoreMainActivity get() = this as CoreMainActivity
@@ -145,9 +146,9 @@ object ActivityExtensions {
     }
   }
 
-  fun Activity.hasNotificationPermission(sharedPreferenceUtil: SharedPreferenceUtil?) =
+  suspend fun Activity.hasNotificationPermission(kiwixDataStore: KiwixDataStore?) =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-      sharedPreferenceUtil?.prefIsTest == false
+      kiwixDataStore?.prefIsTest?.first() == false
     ) {
       ContextCompat.checkSelfPermission(
         this,
@@ -176,12 +177,12 @@ object ActivityExtensions {
     packageName != "org.kiwix.kiwixmobile" && packageName != "org.kiwix.kiwixmobile.standalone"
 
   @SuppressLint("NewApi")
-  fun Activity.isManageExternalStoragePermissionGranted(
-    sharedPreferenceUtil: SharedPreferenceUtil?
+  suspend fun Activity.isManageExternalStoragePermissionGranted(
+    kiwixDataStore: KiwixDataStore?
   ): Boolean =
-    if (sharedPreferenceUtil?.isNotPlayStoreBuildWithAndroid11OrAbove() == true &&
-      !sharedPreferenceUtil.prefIsTest &&
-      sharedPreferenceUtil.manageExternalFilesPermissionDialogOnRefresh
+    if (kiwixDataStore?.isNotPlayStoreBuildWithAndroid11OrAbove() == true &&
+      !kiwixDataStore.prefIsTest.first() &&
+      kiwixDataStore.showManageExternalFilesPermissionDialogOnRefresh.first()
     ) {
       Environment.isExternalStorageManager()
     } else {

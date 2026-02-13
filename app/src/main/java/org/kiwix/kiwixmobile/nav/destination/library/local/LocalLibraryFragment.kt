@@ -60,6 +60,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.kiwix.kiwixmobile.BuildConfig
 import org.kiwix.kiwixmobile.R
@@ -68,11 +69,12 @@ import org.kiwix.kiwixmobile.core.R.string
 import org.kiwix.kiwixmobile.core.base.BaseActivity
 import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.isManageExternalStoragePermissionGranted
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.navigate
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.setNavigationResultOnCurrent
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.viewModel
+import org.kiwix.kiwixmobile.core.extensions.runSafelyInLifecycleScope
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
 import org.kiwix.kiwixmobile.core.main.MainRepositoryActions
@@ -88,7 +90,6 @@ import org.kiwix.kiwixmobile.core.ui.components.ONE
 import org.kiwix.kiwixmobile.core.ui.models.ActionMenuItem
 import org.kiwix.kiwixmobile.core.ui.models.IconItem
 import org.kiwix.kiwixmobile.core.utils.LanguageUtils
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.TAG_KIWIX
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
@@ -118,8 +119,6 @@ private const val SHOW_SCAN_DIALOG_DELAY = 2000L
 @Suppress("LargeClass")
 class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
   @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
-
-  @Inject lateinit var sharedPreferenceUtil: SharedPreferenceUtil
 
   @Inject lateinit var kiwixDataStore: KiwixDataStore
 
@@ -185,7 +184,7 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
           )
         )
       } else if (shouldScanFileSystem) {
-        scanFileSystem()
+        runCatching { lifecycleScope.launch { scanFileSystem() } }
       }
     }
 
@@ -276,18 +275,22 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
   )
 
   private fun onBookItemClick(bookOnDisk: BookOnDisk) {
-    if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
-      showManageExternalStoragePermissionDialog()
-    } else {
-      offerAction(RequestNavigateTo(bookOnDisk))
+    lifecycleScope.runSafelyInLifecycleScope {
+      if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
+        showManageExternalStoragePermissionDialog()
+      } else {
+        offerAction(RequestNavigateTo(bookOnDisk))
+      }
     }
   }
 
   private fun onBookItemLongClick(bookOnDisk: BookOnDisk) {
-    if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
-      showManageExternalStoragePermissionDialog()
-    } else {
-      offerAction(RequestMultiSelection(bookOnDisk))
+    lifecycleScope.runSafelyInLifecycleScope {
+      if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
+        showManageExternalStoragePermissionDialog()
+      } else {
+        offerAction(RequestMultiSelection(bookOnDisk))
+      }
     }
   }
 
@@ -338,7 +341,9 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     if (savedInstanceState != null && savedInstanceState.getBoolean(WAS_IN_ACTION_MODE)) {
       offerAction(FileSelectActions.RestartActionMode)
     }
-    showCopyMoveDialogForOpenedZimFileFromStorage()
+    lifecycleScope.runSafelyInLifecycleScope {
+      showCopyMoveDialogForOpenedZimFileFromStorage()
+    }
   }
 
   private fun downloadBookButtonClick() {
@@ -350,12 +355,12 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     }
   }
 
-  private fun showCopyMoveDialogForOpenedZimFileFromStorage() {
+  private suspend fun showCopyMoveDialogForOpenedZimFileFromStorage() {
     val zimFileUri = arguments?.getString(ZIM_FILE_URI_KEY).orEmpty()
     if (zimFileUri.isNotEmpty()) {
       selectedZimFileUriList.clear()
       selectedZimFileUriList.add(zimFileUri.toUri())
-      if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
+      if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
         showManageExternalStoragePermissionDialog()
       } else if (requestExternalStorageWritePermission()) {
         handleSelectedFileUri(listOf(zimFileUri.toUri()))
@@ -365,27 +370,29 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
   }
 
   private fun onSwipeRefresh() {
-    if (permissionDeniedLayoutShowing) {
-      // When permission denied layout is showing hide the "Swipe refresh".
-      updateLibraryScreenState(swipeRefreshItem = false to true)
-    } else {
-      if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
-        showManageExternalStoragePermissionDialog()
-        // Set loading to false since the dialog is currently being displayed.
-        // If the user clicks on "No" in the permission dialog,
-        // the loading icon remains visible infinitely.
+    lifecycleScope.runSafelyInLifecycleScope {
+      if (permissionDeniedLayoutShowing) {
+        // When permission denied layout is showing hide the "Swipe refresh".
         updateLibraryScreenState(swipeRefreshItem = false to true)
       } else {
-        // hide the swipe refreshing because now we are showing the ContentLoadingProgressBar
-        // to show the progress of how many files are scanned.
-        // disable the swipe refresh layout until the ongoing scanning will not complete
-        // to avoid multiple scanning.
-        updateLibraryScreenState(
-          swipeRefreshItem = false to false,
-          // Show the progress Bar.
-          scanningProgressItem = true to ZERO
-        )
-        requestFileSystemCheck()
+        if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
+          showManageExternalStoragePermissionDialog()
+          // Set loading to false since the dialog is currently being displayed.
+          // If the user clicks on "No" in the permission dialog,
+          // the loading icon remains visible infinitely.
+          updateLibraryScreenState(swipeRefreshItem = false to true)
+        } else {
+          // hide the swipe refreshing because now we are showing the ContentLoadingProgressBar
+          // to show the progress of how many files are scanned.
+          // disable the swipe refresh layout until the ongoing scanning will not complete
+          // to avoid multiple scanning.
+          updateLibraryScreenState(
+            swipeRefreshItem = false to false,
+            // Show the progress Bar.
+            scanningProgressItem = true to ZERO
+          )
+          requestFileSystemCheck()
+        }
       }
     }
   }
@@ -409,20 +416,22 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
    * ask for permission later.
    */
   private fun filePickerButtonClick() {
-    if (!requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil)) {
-      showManageExternalStoragePermissionDialog()
-    } else if (requestExternalStorageWritePermission()) {
-      showFileChooser()
+    lifecycleScope.runSafelyInLifecycleScope {
+      if (!requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore)) {
+        showManageExternalStoragePermissionDialog()
+      } else if (requestExternalStorageWritePermission()) {
+        showFileChooser()
+      }
     }
   }
 
-  private fun showFileChooser() {
+  private suspend fun showFileChooser() {
     val intent = Intent().apply {
       action = Intent.ACTION_OPEN_DOCUMENT
       type = "application/*"
       addCategory(Intent.CATEGORY_OPENABLE)
       putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-      if (sharedPreferenceUtil.prefIsTest) {
+      if (kiwixDataStore.prefIsTest.first()) {
         putExtra(
           "android.provider.extra.INITIAL_URI",
           "content://com.android.externalstorage.documents/document/primary:Download".toUri()
@@ -550,32 +559,34 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
 
   override fun onResume() {
     super.onResume()
-    when {
-      shouldShowFileSystemDialog() -> {
-        Handler(Looper.getMainLooper()).postDelayed({
-          showFileSystemScanDialog()
-        }, SHOW_SCAN_DIALOG_DELAY)
-      }
+    lifecycleScope.launch {
+      when {
+        shouldShowFileSystemDialog() -> {
+          Handler(Looper.getMainLooper()).postDelayed({
+            showFileSystemScanDialog()
+          }, SHOW_SCAN_DIALOG_DELAY)
+        }
 
-      shouldScanFileSystem -> {
-        // When user goes to settings for granting the `MANAGE_EXTERNAL_STORAGE` permission, and
-        // came back to the application then initiate the scanning of file system.
-        scanFileSystem()
-      }
+        shouldScanFileSystem -> {
+          // When user goes to settings for granting the `MANAGE_EXTERNAL_STORAGE` permission, and
+          // came back to the application then initiate the scanning of file system.
+          scanFileSystem()
+        }
 
-      !sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove() &&
-        !sharedPreferenceUtil.prefIsTest && !permissionDeniedLayoutShowing -> {
-        checkPermissions()
-      }
+        !kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove() &&
+          !kiwixDataStore.prefIsTest.first() && !permissionDeniedLayoutShowing -> {
+          checkPermissions()
+        }
 
-      else -> {
-        updateLibraryScreenState(
-          noFilesViewItem = Triple(
-            requireActivity().resources.getString(string.no_files_here),
-            requireActivity().resources.getString(string.download_books),
-            false
+        else -> {
+          updateLibraryScreenState(
+            noFilesViewItem = Triple(
+              requireActivity().resources.getString(string.no_files_here),
+              requireActivity().resources.getString(string.download_books),
+              false
+            )
           )
-        )
+        }
       }
     }
   }
@@ -589,14 +600,18 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     dialogShower.show(
       KiwixDialog.YesNoDialog.FileSystemScan,
       {
-        // Sets true so that it can not show again.
-        sharedPreferenceUtil.prefIsScanFileSystemDialogShown = true
-        shouldScanFileSystem = true
-        scanFileSystem()
+        lifecycleScope.launch {
+          // Sets true so that it can not show again.
+          kiwixDataStore.setIsScanFileSystemDialogShown(true)
+          shouldScanFileSystem = true
+          scanFileSystem()
+        }
       },
       {
-        // User clicks on the "No" button so not show again.
-        sharedPreferenceUtil.prefIsScanFileSystemDialogShown = true
+        lifecycleScope.launch {
+          // User clicks on the "No" button so not show again.
+          kiwixDataStore.setIsScanFileSystemDialogShown(true)
+        }
       }
     )
   }
@@ -608,12 +623,13 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
    * 2. Checks if app has the full scan permission. If not, then it asks for the permission.
    * 3. Then finally it scans the storage for ZIM files.
    */
-  private fun scanFileSystem() {
+  private suspend fun scanFileSystem() {
+    if (!isAdded) return
     when {
-      !hasReadExternalStoragePermission() && !sharedPreferenceUtil.prefIsScanFileSystemTest ->
+      !hasReadExternalStoragePermission() && !kiwixDataStore.isScanFileSystemTest.first() ->
         askForReaderExternalStoragePermission(true)
 
-      !requireActivity().isManageExternalStoragePermissionGranted(sharedPreferenceUtil) ->
+      !requireActivity().isManageExternalStoragePermissionGranted(kiwixDataStore) ->
         showManageExternalStoragePermissionDialog()
 
       else -> {
@@ -630,8 +646,8 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
    *  2. This is not the Play Store build (only the non-PS version, e.g. standalone app).
    *  3. If there are no ZIM files showing on the library screen.
    */
-  private fun shouldShowFileSystemDialog(): Boolean =
-    !sharedPreferenceUtil.prefIsScanFileSystemDialogShown &&
+  private suspend fun shouldShowFileSystemDialog(): Boolean =
+    !kiwixDataStore.isScanFileSystemDialogShown.first() &&
       !BuildConfig.IS_PLAYSTORE &&
       libraryScreenState.value.fileSelectListState.bookOnDiskListItems.isEmpty()
 
@@ -725,7 +741,8 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
       Manifest.permission.READ_EXTERNAL_STORAGE
     ) == PackageManager.PERMISSION_GRANTED
 
-  private fun checkPermissions() {
+  private suspend fun checkPermissions() {
+    if (!isAdded) return
     if (!hasReadExternalStoragePermission()) {
       askForReaderExternalStoragePermission()
     } else {
@@ -733,7 +750,7 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     }
   }
 
-  private fun askForReaderExternalStoragePermission(shouldScanIfHasPermission: Boolean = false) {
+  private suspend fun askForReaderExternalStoragePermission(shouldScanIfHasPermission: Boolean = false) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
       context.toast(string.request_storage)
       storagePermissionLauncher?.launch(
@@ -750,14 +767,14 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     }
   }
 
-  private fun checkManageExternalStoragePermission(shouldScanIfHasPermission: Boolean = false) {
-    if (!sharedPreferenceUtil.isPlayStoreBuild && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+  private suspend fun checkManageExternalStoragePermission(shouldScanIfHasPermission: Boolean = false) {
+    if (!kiwixDataStore.isPlayStoreBuild.first() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       if (!Environment.isExternalStorageManager()) {
         // We do not have the permission!!
-        if (sharedPreferenceUtil.manageExternalFilesPermissionDialog || shouldScanIfHasPermission) {
+        if (kiwixDataStore.showManageExternalFilesPermissionDialog.first() || shouldScanIfHasPermission) {
           // We should only ask for first time, If the users wants to revoke settings
           // then they can directly toggle this feature from settings screen
-          sharedPreferenceUtil.manageExternalFilesPermissionDialog = false
+          kiwixDataStore.setShowManageExternalFilesPermissionDialog(false)
           // Show Dialog and  Go to settings to give permission
           showManageExternalStoragePermissionDialog()
         }
@@ -822,9 +839,9 @@ class LocalLibraryFragment : BaseFragment(), SelectedZimFileCallback {
     }
 
   @Suppress("NestedBlockDepth")
-  private fun requestExternalStorageWritePermission(): Boolean {
+  private suspend fun requestExternalStorageWritePermission(): Boolean {
     var isPermissionGranted = false
-    if (!sharedPreferenceUtil.isPlayStoreBuildWithAndroid11OrAbove() &&
+    if (!kiwixDataStore.isPlayStoreBuildWithAndroid11OrAbove() &&
       Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
     ) {
       if (requireActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)

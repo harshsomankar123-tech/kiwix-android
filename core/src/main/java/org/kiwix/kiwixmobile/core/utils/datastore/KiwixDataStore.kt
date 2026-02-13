@@ -19,26 +19,33 @@
 package org.kiwix.kiwixmobile.core.utils.datastore
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.edit
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.ThemeConfig
 import org.kiwix.kiwixmobile.core.ThemeConfig.Theme.Companion.from
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil.Companion.DEFAULT_ZOOM
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil.Companion.KEY_LANGUAGE_ACTIVE
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil.Companion.KEY_LANGUAGE_CODE
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil.Companion.KEY_LANGUAGE_ID
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil.Companion.KEY_OCCURRENCES_OF_LANGUAGE
+import org.kiwix.kiwixmobile.core.utils.ZERO
+import org.kiwix.kiwixmobile.core.extensions.isFileExist
+import org.kiwix.kiwixmobile.core.zim_manager.Category
 import org.kiwix.kiwixmobile.core.zim_manager.Language
+import java.io.File
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.collections.get
 
 private const val KIWIX_DATASTORE_NAME = "kiwix_datastore_preferences"
 
@@ -283,17 +290,6 @@ class KiwixDataStore @Inject constructor(val context: Context) {
     }
   }
 
-  val deviceDefaultLanguage: Flow<String> =
-    context.kiwixDataStore.data.map { prefs ->
-      prefs[PreferencesKeys.PREF_DEVICE_DEFAULT_LANG].orEmpty()
-    }
-
-  suspend fun setDeviceDefaultLanguage(language: String) {
-    context.kiwixDataStore.edit { prefs ->
-      prefs[PreferencesKeys.PREF_DEVICE_DEFAULT_LANG] = language
-    }
-  }
-
   val prefLanguage: Flow<String> =
     context.kiwixDataStore.data.map { prefs ->
       prefs[PreferencesKeys.PREF_LANG] ?: Locale.ROOT.toString()
@@ -338,12 +334,12 @@ class KiwixDataStore @Inject constructor(val context: Context) {
     }
   }
 
-  val hostedBooks: Flow<Set<String>> =
+  val hostedBookIds: Flow<Set<String>> =
     context.kiwixDataStore.data.map { prefs ->
       prefs[PreferencesKeys.PREF_HOSTED_BOOKS] ?: HashSet()
     }
 
-  suspend fun setHostedBooks(hostedBooks: Set<String>) {
+  suspend fun setHostedBookIds(hostedBooks: Set<String>) {
     context.kiwixDataStore.edit { prefs ->
       prefs[PreferencesKeys.PREF_HOSTED_BOOKS] = hostedBooks
     }
@@ -370,5 +366,270 @@ class KiwixDataStore @Inject constructor(val context: Context) {
       prefs[PreferencesKeys.PREF_LAST_DONATION_POPUP_SHOWN_IN_MILLISECONDS] =
         lastDonationPopupShownInMilliSeconds
     }
+  }
+
+  val isScanFileSystemDialogShown: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN] ?: false
+    }
+
+  suspend fun setIsScanFileSystemDialogShown(isFileScanFileSystemDialogShown: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN] = isFileScanFileSystemDialogShown
+    }
+  }
+
+  val isScanFileSystemTest: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_IS_SCAN_FILE_SYSTEM_TEST] ?: false
+    }
+
+  @VisibleForTesting
+  suspend fun setIsScanFileSystemTest(isScanFileSystemTest: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_IS_SCAN_FILE_SYSTEM_TEST] = isScanFileSystemTest
+    }
+  }
+
+  val showManageExternalFilesPermissionDialog: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_MANAGE_EXTERNAL_FILES] ?: true
+    }
+
+  suspend fun setShowManageExternalFilesPermissionDialog(isScanFileSystemTest: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_MANAGE_EXTERNAL_FILES] = isScanFileSystemTest
+    }
+  }
+
+  val showManageExternalFilesPermissionDialogOnRefresh: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_SHOW_MANAGE_PERMISSION_DIALOG_ON_REFRESH] ?: true
+    }
+
+  @VisibleForTesting
+  suspend fun setManageExternalFilesPermissionDialogOnRefresh(showOnRefresh: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_SHOW_MANAGE_PERMISSION_DIALOG_ON_REFRESH] = showOnRefresh
+    }
+  }
+
+  val showStorageOption: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_SHOW_STORAGE_OPTION] ?: true
+    }
+
+  suspend fun setShowStorageOption(showStorageOption: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_SHOW_STORAGE_OPTION] = showStorageOption
+    }
+  }
+
+  val shouldShowStorageSelectionDialogOnCopyMove: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_SHOW_COPY_MOVE_STORAGE_SELECTION_DIALOG] ?: true
+    }
+
+  suspend fun setShowStorageSelectionDialogOnCopyMove(showStorageOption: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_SHOW_COPY_MOVE_STORAGE_SELECTION_DIALOG] = showStorageOption
+    }
+  }
+
+  val selectedStorage: Flow<String> =
+    context.kiwixDataStore.data.map { prefs ->
+      val storage = prefs[PreferencesKeys.PREF_STORAGE]
+      return@map when {
+        storage == null ->
+          getPublicDirectoryPath(defaultPublicStorage()).also {
+            setSelectedStorage(it)
+            setSelectedStoragePosition(ZERO)
+          }
+
+        !File(storage).isFileExist() ->
+          getPublicDirectoryPath(defaultPublicStorage()).also {
+            setSelectedStoragePosition(ZERO)
+          }
+
+        else -> storage
+      }
+    }
+
+  suspend fun setSelectedStorage(selectedStorage: String) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_STORAGE] = selectedStorage
+    }
+  }
+
+  suspend fun getPublicDirectoryPath(path: String): String =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      path
+    } else {
+      path.substringBefore(context.getString(R.string.android_directory_seperator))
+    }
+
+  @Suppress("InjectDispatcher")
+  suspend fun defaultStorage(): String = withContext(Dispatchers.IO) {
+    context.getExternalFilesDirs(null)[ZERO]?.path
+      ?: context.filesDir.path // a workaround for emulators
+  }
+
+  @Suppress("InjectDispatcher")
+  private suspend fun defaultPublicStorage(): String = withContext(Dispatchers.IO) {
+    ContextWrapper(context).externalMediaDirs[ZERO]?.path
+      ?: context.filesDir.path // a workaround for emulators
+  }
+
+  val selectedStoragePosition: Flow<Int> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.STORAGE_POSITION] ?: ZERO
+    }
+
+  suspend fun setSelectedStoragePosition(pos: Int) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.STORAGE_POSITION] = pos
+    }
+  }
+
+  val isFirstRun: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_IS_FIRST_RUN] ?: true
+    }
+
+  suspend fun setIsFirstRun(isFirstRun: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_IS_FIRST_RUN] = isFirstRun
+    }
+  }
+
+  val isPlayStoreBuild: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.IS_PLAY_STORE_BUILD] ?: false
+    }
+
+  suspend fun setIsPlayStoreBuild(isPlayStoreBuild: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.IS_PLAY_STORE_BUILD] = isPlayStoreBuild
+    }
+  }
+
+  @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
+  suspend fun isPlayStoreBuildWithAndroid11OrAbove(): Boolean =
+    isPlayStoreBuild.first() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+  @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
+  suspend fun isNotPlayStoreBuildWithAndroid11OrAbove(): Boolean =
+    !isPlayStoreBuild.first() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+  val prefIsTest: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PREF_IS_TEST] ?: false
+    }
+
+  suspend fun setPrefIsTest(prefIsTest: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PREF_IS_TEST] = prefIsTest
+    }
+  }
+
+  val perAppLanguageMigrated: Flow<Boolean> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.PER_APP_LANGUAGE_MIGRATION] ?: false
+    }
+
+  suspend fun putPerAppLanguageMigration(isMigrated: Boolean) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.PER_APP_LANGUAGE_MIGRATION] = isMigrated
+    }
+  }
+
+  val selectedOnlineContentCategory: Flow<String> =
+    context.kiwixDataStore.data.map { pref ->
+      pref[PreferencesKeys.SELECTED_ONLINE_CONTENT_CATEGORY].orEmpty()
+    }
+
+  suspend fun setSelectedOnlineContentCategory(selectedOnlineContentCategory: String) {
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.SELECTED_ONLINE_CONTENT_CATEGORY] = selectedOnlineContentCategory
+    }
+  }
+
+  val cachedOnlineCategoryList: Flow<List<Category>?> =
+    context.kiwixDataStore.data.map { prefs ->
+      prefs[PreferencesKeys.CACHED_ONLINE_CATEGORIES]?.let { jsonString ->
+        val jsonArray = JSONArray(jsonString)
+        List(jsonArray.length()) { i ->
+          val obj = jsonArray.getJSONObject(i)
+          Category(
+            category = obj.getString(KEY_ONLINE_CATEGORY_NAME),
+            active = selectedOnlineContentCategory.first() == obj.getString(KEY_ONLINE_CATEGORY_NAME),
+            id = obj.getLong(KEY_ONLINE_CATEGORY_ID)
+          )
+        }
+      }
+    }
+
+  suspend fun saveOnlineCategoryList(categories: List<Category>) {
+    val jsonArray = JSONArray()
+    categories.forEach { category ->
+      val obj = JSONObject().apply {
+        put(KEY_ONLINE_CATEGORY_NAME, category.category)
+        put(KEY_ONLINE_CATEGORY_ID, category.id)
+      }
+      jsonArray.put(obj)
+    }
+    context.kiwixDataStore.edit { prefs ->
+      prefs[PreferencesKeys.CACHED_ONLINE_CATEGORIES] = jsonArray.toString()
+    }
+  }
+
+  companion object {
+    // Prefs
+    const val PREF_LANG = "pref_language_chooser"
+    const val PREF_STORAGE = "pref_select_folder"
+    const val STORAGE_POSITION = "storage_position"
+    const val PREF_WIFI_ONLY = "pref_wifi_only"
+    const val PREF_KIWIX_MOBILE = "kiwix-mobile"
+    const val PREF_SHOW_INTRO = "showIntro"
+    const val PREF_IS_TEST = "is_test"
+    const val PREF_SHOW_SHOWCASE = "showShowCase"
+    const val PREF_BACK_TO_TOP = "pref_backtotop"
+    const val PREF_NEW_TAB_BACKGROUND = "pref_newtab_background"
+    const val PREF_EXTERNAL_LINK_POPUP = "pref_external_link_popup"
+    const val PREF_SHOW_STORAGE_OPTION = "show_storgae_option"
+    const val PREF_IS_FIRST_RUN = "isFirstRun"
+    const val PREF_SHOW_BOOKMARKS_ALL_BOOKS = "show_bookmarks_current_book"
+    const val PREF_SHOW_HISTORY_ALL_BOOKS = "show_history_current_book"
+    const val PREF_SHOW_NOTES_ALL_BOOKS = "show_notes_current_book"
+    const val PREF_HOSTED_BOOKS = "hosted_books"
+    const val PREF_THEME = "pref_dark_mode"
+    const val TEXT_ZOOM = "true_text_zoom"
+    const val DEFAULT_ZOOM = 100
+    const val PREF_MANAGE_EXTERNAL_FILES = "pref_manage_external_files"
+    const val PREF_SHOW_MANAGE_PERMISSION_DIALOG_ON_REFRESH = "pref_show_manage_external_files"
+    const val IS_PLAY_STORE_BUILD = "is_play_store_build"
+    const val PREF_BOOKMARKS_MIGRATED = "pref_bookmarks_migrated"
+    const val PREF_RECENT_SEARCH_MIGRATED = "pref_recent_search_migrated"
+    const val PREF_HISTORY_MIGRATED = "pref_history_migrated"
+    const val PREF_NOTES_MIGRATED = "pref_notes_migrated"
+    const val PREF_APP_DIRECTORY_TO_PUBLIC_MIGRATED = "pref_app_directory_to_public_migrated"
+    const val PREF_BOOK_ON_DISK_MIGRATED = "pref_book_on_disk_migrated"
+    const val PREF_SHOW_COPY_MOVE_STORAGE_SELECTION_DIALOG = "pref_show_copy_move_storage_dialog"
+    const val PREF_LATER_CLICKED_MILLIS = "pref_later_clicked_millis"
+    const val PREF_LAST_DONATION_POPUP_SHOWN_IN_MILLISECONDS =
+      "pref_last_donation_shown_in_milliseconds"
+    const val SELECTED_ONLINE_CONTENT_LANGUAGE = "selectedOnlineContentLanguage"
+    const val CACHED_LANGUAGE_CODES = "cachedLanguageCodes"
+    const val KEY_LANGUAGE_CODE = "languageCode"
+    const val KEY_OCCURRENCES_OF_LANGUAGE = "occurrencesOfLanguage"
+    const val KEY_LANGUAGE_ACTIVE = "languageActive"
+    const val KEY_LANGUAGE_ID = "languageId"
+    const val PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN = "prefScanFileSystemDialogShown"
+    const val PREF_IS_SCAN_FILE_SYSTEM_TEST = "prefIsScanFileSystemTest"
+    const val PER_APP_LANGUAGE_MIGRATION = "per_app_language_migration"
+    const val SELECTED_ONLINE_CONTENT_CATEGORY = "selectedOnlineContentCategory"
+    const val CACHED_ONLINE_CATEGORIES = "cachedOnlineCategories"
+    private const val KEY_ONLINE_CATEGORY_NAME = "onlineCategoryName"
+    private const val KEY_ONLINE_CATEGORY_ID = "onlineCategoryId"
   }
 }

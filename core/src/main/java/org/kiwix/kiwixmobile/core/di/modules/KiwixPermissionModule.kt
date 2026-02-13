@@ -1,6 +1,6 @@
 /*
  * Kiwix Android
- * Copyright (c) 2019 Kiwix <android.kiwix.org>
+ * Copyright (c) 2026 Kiwix <android.kiwix.org>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -15,14 +15,19 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
-package org.kiwix.kiwixmobile.intro
 
-import org.kiwix.kiwixmobile.core.base.BaseContract
+package org.kiwix.kiwixmobile.core.di.modules
 
-interface IntroContract {
-  interface View : BaseContract.View<Presenter?>
+import dagger.Module
+import dagger.Provides
+import org.kiwix.kiwixmobile.core.utils.AndroidPermissionChecker
+import org.kiwix.kiwixmobile.core.utils.KiwixPermissionChecker
+import javax.inject.Singleton
 
-  interface Presenter : BaseContract.Presenter<View?> {
-    suspend fun setIntroShown()
-  }
+@Module
+class KiwixPermissionModule {
+  @Singleton
+  @Provides
+  fun provideKiwixPermissionChecker(androidPermissionChecker: AndroidPermissionChecker): KiwixPermissionChecker =
+    androidPermissionChecker
 }

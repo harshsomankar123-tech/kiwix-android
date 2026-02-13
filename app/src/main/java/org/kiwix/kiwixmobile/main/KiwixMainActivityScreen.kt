@@ -43,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -55,6 +56,7 @@ import org.kiwix.kiwixmobile.core.main.DrawerMenuGroup
 import org.kiwix.kiwixmobile.core.main.LeftDrawerMenu
 import org.kiwix.kiwixmobile.core.ui.theme.KiwixTheme
 import org.kiwix.kiwixmobile.core.ui.theme.White
+import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.ui.KiwixDestination
 import org.kiwix.kiwixmobile.ui.KiwixNavGraph
 
@@ -74,7 +76,9 @@ fun KiwixMainActivityScreen(
   uiCoroutineScope: CoroutineScope,
   enableLeftDrawer: Boolean,
   shouldShowBottomAppBar: Boolean,
-  bottomAppBarScrollBehaviour: BottomAppBarScrollBehavior?
+  bottomAppBarScrollBehaviour: BottomAppBarScrollBehavior?,
+  viewModelFactory: ViewModelProvider.Factory,
+  alertDialogShower: AlertDialogShower
 ) {
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentRoute = navBackStackEntry?.destination?.route
@@ -116,7 +120,9 @@ fun KiwixMainActivityScreen(
           KiwixNavGraph(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            viewModelFactory = viewModelFactory,
+            alertDialogShower = alertDialogShower
           )
         }
       }

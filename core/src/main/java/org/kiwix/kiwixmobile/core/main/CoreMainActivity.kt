@@ -40,6 +40,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDirections
 import androidx.navigation.NavHostController
@@ -54,15 +55,16 @@ import org.kiwix.kiwixmobile.core.CoreApp
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.base.BaseActivity
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
+import org.kiwix.kiwixmobile.core.dao.DownloadRoomDao
 import org.kiwix.kiwixmobile.core.di.components.CoreActivityComponent
-import org.kiwix.kiwixmobile.core.downloader.DownloadMonitor
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.APP_NAME_KEY
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.DOWNLOAD_TIMEOUT_LIMIT_REACH_NOTIFICATION_ID
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.DownloadMonitorService
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.DownloadMonitorService.Companion.STOP_DOWNLOAD_SERVICE
+import org.kiwix.kiwixmobile.core.downloader.downloadManager.DownloadMonitorService.Companion.isDownloadMonitorServiceRunning
 import org.kiwix.kiwixmobile.core.error.ErrorActivity
+import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.setNavigationResultOnCurrent
 import org.kiwix.kiwixmobile.core.extensions.browserIntent
-import org.kiwix.kiwixmobile.core.extensions.isServiceRunning
 import org.kiwix.kiwixmobile.core.reader.ZimReaderContainer
 import org.kiwix.kiwixmobile.core.reader.ZimReaderSource
 import org.kiwix.kiwixmobile.core.utils.ExternalLinkOpener
@@ -86,12 +88,12 @@ const val LOCAL_LIBRARY_FRAGMENT = "localLibraryFragment"
 const val DOWNLOAD_FRAGMENT = "downloadsFragment"
 const val BOOKMARK_FRAGMENT = "bookmarkFragment"
 const val NOTES_FRAGMENT = "notesFragment"
-const val INTRO_FRAGMENT = "introFragment"
+const val INTRO_SCREEN = "introScreen"
 const val HISTORY_FRAGMENT = "historyFragment"
-const val LANGUAGE_FRAGMENT = "languageFragment"
+const val LANGUAGE_SCREEN = "languageScreen"
 const val ZIM_HOST_FRAGMENT = "zimHostFragment"
-const val HELP_FRAGMENT = "helpFragment"
-const val SETTINGS_FRAGMENT = "settingsFragment"
+const val HELP_SCREEN = "helpScreen"
+const val SETTINGS_SCREEN = "settingsScreen"
 const val SEARCH_FRAGMENT = "searchFragment"
 const val LOCAL_FILE_TRANSFER_FRAGMENT = "localFileTransferFragment"
 
@@ -110,6 +112,7 @@ const val LEFT_DRAWER_ZIM_HOST_ITEM_TESTING_TAG = "leftDrawerZimHostItemTestingT
 const val LEFT_DRAWER_ABOUT_APP_ITEM_TESTING_TAG = "leftDrawerAboutAppItemTestingTag"
 
 abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
+  @Inject lateinit var viewModelFactory: ViewModelProvider.Factory
   abstract val searchFragmentRoute: String
 
   @Inject lateinit var alertDialogShower: AlertDialogShower
@@ -120,6 +123,9 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
   private var drawerToggle: ActionBarDrawerToggle? = null
 
   @Inject lateinit var zimReaderContainer: ZimReaderContainer
+
+  @Inject
+  lateinit var downloadRoomDao: DownloadRoomDao
 
   /**
    * We have migrated the UI in compose, so providing the compose based navigation to activity
@@ -170,9 +176,6 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
   abstract val topLevelDestinationsRoute: Set<String>
   abstract val mainActivity: AppCompatActivity
   abstract val appName: String
-
-  @Inject
-  lateinit var downloadMonitor: DownloadMonitor
 
   /**
    * Manages the visibility of the left drawer by tracking its state.
@@ -264,9 +267,7 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
 
   override fun onResume() {
     super.onResume()
-    // Resume in-app download monitoring now that the app is visible again.
-    downloadMonitor.startMonitoringDownload()
-    stopDownloadServiceIfRunning()
+    startDownloadMonitorServiceIfOngoingDownloads(true)
     cancelBackgroundTimeoutNotification()
   }
 
@@ -275,7 +276,7 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
    * as the application is now in the foreground and can handle downloads directly.
    */
   private fun stopDownloadServiceIfRunning() {
-    if (isServiceRunning(DownloadMonitorService::class.java)) {
+    if (isDownloadMonitorServiceRunning) {
       startService(
         Intent(
           this,
@@ -285,27 +286,33 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
     }
   }
 
-  override fun onPause() {
-    // Start the DownloadService as the app is about to enter the background,
-    // so downloads can continue even if the app is no longer in the foreground.
-    startMonitoringDownloads()
-    downloadMonitor.stopListeningDownloads()
-    super.onPause()
-  }
-
   /**
-   * Starts monitoring the downloads by ensuring that the `DownloadMonitorService` is running.
-   * This service keeps the Fetch instance alive when the application is in the background
-   *  or has been killed by the user or system, allowing downloads to continue in the background.
+   * Starts the [DownloadMonitorService] if there are any ongoing downloads.
+   *
+   * This method checks whether the download monitoring service is already running.
+   * If not, it queries the database for ongoing downloads on a background thread.
+   * When at least one active download is found, the service is started with the
+   * required app metadata. If no ongoing downloads exist, the service is stopped
+   * to avoid unnecessary background work.
    */
-  private fun startMonitoringDownloads() {
-    if (!isServiceRunning(DownloadMonitorService::class.java)) {
-      runCatching {
-        startService(
-          Intent(this, DownloadMonitorService::class.java).apply {
-            putExtra(APP_NAME_KEY, appName)
+  @Suppress("InjectDispatcher")
+  fun startDownloadMonitorServiceIfOngoingDownloads(isAppStart: Boolean = false) {
+    if (!isDownloadMonitorServiceRunning) {
+      CoroutineScope(Dispatchers.IO).launch {
+        runCatching {
+          if (downloadRoomDao.getOngoingDownloads().isNotEmpty() || !isAppStart) {
+            startService(
+              Intent(
+                this@CoreMainActivity,
+                DownloadMonitorService::class.java
+              ).apply {
+                putExtra(APP_NAME_KEY, appName)
+              }
+            )
+          } else {
+            stopDownloadServiceIfRunning()
           }
-        )
+        }
       }
     }
   }
@@ -389,10 +396,9 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
   fun openSupportKiwixExternalLink() {
     closeNavigationDrawer()
     lifecycleScope.launch {
-      externalLinkOpener.openExternalUrl(
+      externalLinkOpener.openExternalLinkWithDialog(
         KIWIX_SUPPORT_URL.toUri().browserIntent(),
-        false,
-        this
+        getString(R.string.support_donation_platform)
       )
     }
   }
@@ -443,11 +449,26 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
     isVoice: Boolean = false
   )
 
-  abstract fun openPage(
+  fun openPage(
     pageUrl: String,
     zimReaderSource: ZimReaderSource? = null,
     shouldOpenInNewTab: Boolean = false
-  )
+  ) {
+    var zimFileUri = ""
+    if (zimReaderSource != null) {
+      zimFileUri = zimReaderSource.toDatabase()
+    }
+    val navOptions = NavOptions.Builder()
+      .setLaunchSingleTop(true)
+      .setPopUpTo(readerFragmentRoute, inclusive = true)
+      .build()
+    // Navigate to reader screen.
+    navigate(readerFragmentRoute, navOptions)
+    // Set arguments on current destination(reader).
+    setNavigationResultOnCurrent(zimFileUri, ZIM_FILE_URI_KEY)
+    setNavigationResultOnCurrent(pageUrl, PAGE_URL_KEY)
+    setNavigationResultOnCurrent(shouldOpenInNewTab, SHOULD_OPEN_IN_NEW_TAB)
+  }
 
   private fun openBookmarks() {
     handleDrawerOnNavigation()
@@ -466,10 +487,6 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
 
   private fun setMainActivityToCoreApp() {
     (applicationContext as CoreApp).setMainActivity(this)
-  }
-
-  fun findInPage(searchString: String) {
-    navigate("$readerFragmentRoute?$FIND_IN_PAGE_SEARCH_STRING=$searchString")
   }
 
   private fun cancelBackgroundTimeoutNotification() {

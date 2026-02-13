@@ -1,6 +1,6 @@
 /*
  * Kiwix Android
- * Copyright (c) 2019 Kiwix <android.kiwix.org>
+ * Copyright (c) 2025 Kiwix <android.kiwix.org>
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -15,13 +15,27 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
-package org.kiwix.kiwixmobile.core.settings
 
-import org.kiwix.kiwixmobile.core.base.BaseContract
+package org.kiwix.kiwixmobile.core.zim_manager
 
-interface SettingsContract {
-  interface View : BaseContract.View<Presenter?>
-  interface Presenter : BaseContract.Presenter<View?> {
-    suspend fun clearHistory()
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+
+@Parcelize
+data class Category constructor(
+  val id: Long = 0,
+  var active: Boolean,
+  val category: String
+) : Parcelable {
+  override fun equals(other: Any?): Boolean =
+    (other as Category).category == category && other.active == active
+
+  override fun hashCode(): Int {
+    var result = active.hashCode()
+    result = 31 * result + category.hashCode()
+    return result
   }
+
+  fun matches(filter: String) =
+    category.contains(filter, true)
 }

@@ -19,13 +19,17 @@
 package org.kiwix.kiwixmobile.reader
 
 import android.os.Build
+import android.os.Bundle
+import android.os.Message
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavOptions
-import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.internal.runner.junit4.statement.UiThreadStatement
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,16 +48,19 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.jupiter.api.Assertions
 import org.kiwix.kiwixmobile.BaseActivityTest
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.setNavigationResultOnCurrent
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
+import org.kiwix.kiwixmobile.core.main.KiwixWebView
 import org.kiwix.kiwixmobile.core.main.ZIM_FILE_URI_KEY
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
+import org.kiwix.kiwixmobile.core.main.reader.CoreReaderFragment
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
+import org.kiwix.kiwixmobile.core.utils.files.FileUtils
 import org.kiwix.kiwixmobile.main.KiwixMainActivity
+import org.kiwix.kiwixmobile.main.topLevel
 import org.kiwix.kiwixmobile.page.bookmarks.bookmarks
 import org.kiwix.kiwixmobile.testutils.RetryRule
 import org.kiwix.kiwixmobile.testutils.TestUtils
@@ -75,6 +82,8 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
   val composeTestRule = createComposeRule()
 
   private lateinit var kiwixMainActivity: KiwixMainActivity
+  private val rayCharlesZimFileUrl =
+    "https://dev.kiwix.org/kiwix-android/test/wikipedia_en_ray_charles_maxi_2023-12.zim"
 
   @Before
   override fun waitForIdle() {
@@ -84,29 +93,21 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
       }
       waitForIdle()
     }
-    val kiwixDataStore = KiwixDataStore(context).apply {
+    KiwixDataStore(context).apply {
       lifeCycleScope.launch {
         setWifiOnly(false)
         setIntroShown()
         setPrefLanguage("en")
+        setIsScanFileSystemDialogShown(true)
+        setIsFirstRun(false)
+        setPrefIsTest(true)
       }
-    }
-    PreferenceManager.getDefaultSharedPreferences(context).edit {
-      putBoolean(SharedPreferenceUtil.PREF_IS_TEST, true)
-      putBoolean(SharedPreferenceUtil.PREF_SCAN_FILE_SYSTEM_DIALOG_SHOWN, true)
-      putBoolean(SharedPreferenceUtil.PREF_IS_FIRST_RUN, false)
     }
     activityScenario =
       ActivityScenario.launch(KiwixMainActivity::class.java).apply {
         moveToState(Lifecycle.State.RESUMED)
         onActivity {
-          runBlocking {
-            handleLocaleChange(
-              it,
-              "en",
-              kiwixDataStore
-            )
-          }
+          AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
         }
       }
     val accessibilityValidator = AccessibilityValidator().setRunChecksFromRootView(true)
@@ -278,13 +279,116 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
     }
   }
 
-  private fun downloadRequest() =
-    Request.Builder()
-      .url(
-        URI.create(
-          "https://download.kiwix.org/zim/wikipedia_fr_climate-change_mini.zim"
-        ).toURL()
-      ).build()
+  @Test
+  fun testReadAloudFeature() {
+    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      activityScenario.onActivity {
+        kiwixMainActivity = it
+        kiwixMainActivity.navigate(KiwixDestination.Library.route)
+      }
+      composeTestRule.waitForIdle()
+      val downloadingZimFile = getDownloadingZimFile()
+      getOkkHttpClientForTesting().newCall(downloadRequest(rayCharlesZimFileUrl)).execute()
+        .use { response ->
+          if (response.isSuccessful) {
+            response.body?.let { responseBody ->
+              writeZimFileData(responseBody, downloadingZimFile)
+            }
+          } else {
+            throw RuntimeException(
+              "Download Failed. Error: ${response.message}\n" +
+                " Status Code: ${response.code}"
+            )
+          }
+        }
+      openKiwixReaderFragmentWithFile(downloadingZimFile)
+      composeTestRule.waitForIdle()
+      reader {
+        startReadAloudFeature(composeTestRule)
+        // Open history screen.
+        topLevel {
+          clickHistoryOnSideNav(kiwixMainActivity, composeTestRule) {
+            clickOnHistoryItem(composeTestRule)
+            startReadAloudFeature(composeTestRule)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun testBase64ImageSaving() {
+    if (Build.VERSION.SDK_INT == Build.VERSION_CODES.N_MR1) return
+    activityScenario.onActivity {
+      kiwixMainActivity = it
+      kiwixMainActivity.navigate(KiwixDestination.Library.route)
+    }
+    composeTestRule.waitForIdle()
+    val zimFile = getLocalZIMFile()
+    openKiwixReaderFragmentWithFile(zimFile)
+    composeTestRule.waitForIdle()
+    reader {
+      checkZimFileLoadedSuccessful(composeTestRule)
+    }
+    // try to save the base64 image. Since there is no longClick method available
+    // in testing for webview so we are directly calling the method to verify the real behaviour.
+    val coreReaderFragment =
+      kiwixMainActivity.supportFragmentManager.fragments
+        .filterIsInstance<CoreReaderFragment>()
+        .firstOrNull()
+    val kiwixWebView = coreReaderFragment?.getCurrentWebView()
+      ?: throw IllegalStateException("Could not get current webView")
+    val base64Src =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg=="
+
+    val msg = Message.obtain().apply {
+      data = Bundle().apply {
+        putString("src", base64Src)
+        putString("url", null)
+      }
+    }
+    val saveHandler = KiwixWebView.SaveHandler(
+      kiwixWebView.zimReaderContainer,
+      kiwixWebView.kiwixDataStore
+    )
+
+    // Must run on main thread because Handler uses MainLooper
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+      saveHandler.handleMessage(msg)
+    }
+    val savedFile = runBlocking { waitForDownloadedImageFile(kiwixWebView.kiwixDataStore) }
+
+    Assertions.assertNotNull(savedFile)
+    Assertions.assertTrue(savedFile.exists())
+    Assertions.assertTrue(savedFile.length() > 0)
+    Assertions.assertTrue(savedFile.extension == "png")
+  }
+
+  private suspend fun waitForDownloadedImageFile(kiwixDataStore: KiwixDataStore): File {
+    val dir = FileUtils.getDownloadRootDir(kiwixDataStore)
+
+    repeat(20) {
+      dir?.listFiles()?.firstOrNull { it.name.startsWith("image_") }?.let {
+        return it
+      }
+      Thread.sleep(500)
+    }
+    throw AssertionError("Base64 image was not saved")
+  }
+
+  private fun ReaderRobot.startReadAloudFeature(composeTestRule: ComposeContentTestRule) {
+    checkZimFileLoadedSuccessful(composeTestRule)
+    clickOnReadAloudMenuItem(composeTestRule)
+    try {
+      assertTTSLanguageIsNotSupportedDialogDisplayed(composeTestRule)
+    } catch (_: ComposeTimeoutException) {
+      assertTTSControlsVisible(composeTestRule)
+      clickOnTTSStopButton(composeTestRule)
+    }
+  }
+
+  private fun downloadRequest(zimUrl: String = "https://download.kiwix.org/zim/wikipedia_fr_climate-change_mini.zim") =
+    Request.Builder().url(URI.create(zimUrl).toURL()).build()
 
   private fun getDownloadingZimFile(): File {
     val zimFile = File(context.cacheDir, "klimawandel.zim")

@@ -27,6 +27,7 @@ import android.util.AttributeSet
 import android.view.ContextMenu
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,7 +45,6 @@ import org.kiwix.kiwixmobile.core.extensions.showFullScreenMode
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.reader.ZimReaderContainer
 import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.getCurrentLocale
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.files.FileUtils
 import org.kiwix.kiwixmobile.core.utils.files.Log
@@ -62,7 +62,6 @@ open class KiwixWebView @SuppressLint("SetJavaScriptEnabled") constructor(
   attrs: AttributeSet,
   videoView: ViewGroup?,
   private val coreWebViewClient: CoreWebViewClient,
-  val sharedPreferenceUtil: SharedPreferenceUtil,
   val kiwixDataStore: KiwixDataStore
 ) : VideoEnabledWebView(context, attrs) {
   @Inject
@@ -135,7 +134,7 @@ open class KiwixWebView @SuppressLint("SetJavaScriptEnabled") constructor(
       val saveMenu =
         menu.add(0, 1, 0, resources.getString(R.string.save_media))
       saveMenu.setOnMenuItemClickListener {
-        val msg = SaveHandler(zimReaderContainer, sharedPreferenceUtil).obtainMessage()
+        val msg = SaveHandler(zimReaderContainer, kiwixDataStore).obtainMessage()
         requestFocusNodeHref(msg)
         true
       }
@@ -165,9 +164,9 @@ open class KiwixWebView @SuppressLint("SetJavaScriptEnabled") constructor(
     callback.webViewPageChanged(page, pages)
   }
 
-  internal class SaveHandler(
+  class SaveHandler(
     private val zimReaderContainer: ZimReaderContainer,
-    private val sharedPreferenceUtil: SharedPreferenceUtil
+    private val kiwixDataStore: KiwixDataStore
   ) :
     Handler(Looper.getMainLooper()) {
     @SuppressWarnings("InjectDispatcher")
@@ -177,14 +176,17 @@ open class KiwixWebView @SuppressLint("SetJavaScriptEnabled") constructor(
       if (url == null && src == null) return
       CoroutineScope(Dispatchers.IO).launch {
         val savedFile =
-          FileUtils.downloadFileFromUrl(url, src, zimReaderContainer, sharedPreferenceUtil)
-
+          FileUtils.downloadFileFromUrl(url, src, zimReaderContainer, kiwixDataStore)
+        val applicationContextForLanguage = ContextCompat.getContextForLanguage(instance)
         withContext(Dispatchers.Main) {
           savedFile?.let {
-            instance.toast(instance.getString(R.string.save_media_saved, it.name))
-            Log.e("savedFile", "handleMessage: ${savedFile.isFile} ${savedFile.path}")
+            applicationContextForLanguage.toast(
+              applicationContextForLanguage.getString(R.string.save_media_saved, it.name)
+            ).also {
+              Log.e("savedFile", "handleMessage: ${savedFile.isFile} ${savedFile.path}")
+            }
           } ?: run {
-            instance.toast(R.string.save_media_error)
+            applicationContextForLanguage.toast(R.string.save_media_error)
           }
         }
       }

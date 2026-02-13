@@ -35,7 +35,7 @@ import org.kiwix.kiwixmobile.core.R.string
 import org.kiwix.kiwixmobile.core.base.BaseActivity
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions.Super
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions.Super.ShouldCall
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.consumeObservable
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.getObservableNavigationResult
 import org.kiwix.kiwixmobile.core.extensions.isFileExist
@@ -109,7 +109,6 @@ class KiwixReaderFragment : CoreReaderFragment() {
           tryOpeningZimFile(zimFileUri)
         } else {
           isWebViewHistoryRestoring = true
-          isFromManageExternalLaunch = true
           val restoreOrigin =
             if (searchItemTitle.isNotEmpty()) FromSearchScreen else FromExternalLaunch
           manageExternalLaunchAndRestoringViewState(restoreOrigin)
@@ -162,11 +161,14 @@ class KiwixReaderFragment : CoreReaderFragment() {
   }
 
   override fun openHomeScreen() {
-    Handler(Looper.getMainLooper()).postDelayed({
-      if (webViewList.isEmpty()) {
-        hideTabSwitcher(false)
-      }
-    }, HIDE_TAB_SWITCHER_DELAY)
+    runSafelyInCoreReaderLifecycleScope {
+      // Run safely because it is runs after 300 MS.
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (webViewList.isEmpty()) {
+          hideTabSwitcher(false)
+        }
+      }, HIDE_TAB_SWITCHER_DELAY)
+    }
   }
 
   /**
@@ -184,7 +186,7 @@ class KiwixReaderFragment : CoreReaderFragment() {
    */
   override fun hideTabSwitcher(shouldCloseZimBook: Boolean) {
     enableLeftDrawer()
-    (requireActivity() as CoreMainActivity).showBottomAppBar()
+    (requireActivity() as? CoreMainActivity)?.showBottomAppBar()
     if (webViewList.isEmpty()) {
       readerMenuState?.hideTabSwitcher()
       exitBook(shouldCloseZimBook)
@@ -257,7 +259,7 @@ class KiwixReaderFragment : CoreReaderFragment() {
           }?.first()
         if (zimReaderSource?.canOpenInLibkiwix() == true) {
           if (zimReaderContainer?.zimReaderSource == null) {
-            openZimFile(zimReaderSource, isFromManageExternalLaunch = true)
+            openZimFile(zimReaderSource)
             Log.d(
               TAG_KIWIX,
               "Kiwix normal start, Opened last used zimFile: -> ${zimReaderSource.toDatabase()}"

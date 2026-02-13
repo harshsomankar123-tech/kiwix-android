@@ -24,6 +24,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.view.ActionMode
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.DrawerValue
@@ -39,7 +40,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
-import androidx.core.os.ConfigurationCompat
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -69,7 +70,6 @@ import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
 import org.kiwix.kiwixmobile.core.dao.LibkiwixBookOnDisk
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.DOWNLOAD_NOTIFICATION_TITLE
 import org.kiwix.kiwixmobile.core.downloader.downloadManager.DOWNLOAD_TIMEOUT_RESUME_INTENT
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.HUNDERED
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.setNavigationResultOnCurrent
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.extensions.update
@@ -80,13 +80,11 @@ import org.kiwix.kiwixmobile.core.main.LEFT_DRAWER_HELP_ITEM_TESTING_TAG
 import org.kiwix.kiwixmobile.core.main.LEFT_DRAWER_SUPPORT_ITEM_TESTING_TAG
 import org.kiwix.kiwixmobile.core.main.LEFT_DRAWER_ZIM_HOST_ITEM_TESTING_TAG
 import org.kiwix.kiwixmobile.core.main.NEW_TAB_SHORTCUT_ID
-import org.kiwix.kiwixmobile.core.main.PAGE_URL_KEY
-import org.kiwix.kiwixmobile.core.main.SHOULD_OPEN_IN_NEW_TAB
 import org.kiwix.kiwixmobile.core.main.ZIM_FILE_URI_KEY
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_DEEP_LINK_SCHEME
 import org.kiwix.kiwixmobile.core.reader.ZimFileReader.Companion.CONTENT_PREFIX
-import org.kiwix.kiwixmobile.core.reader.ZimReaderSource
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
+import org.kiwix.kiwixmobile.core.utils.HUNDERED
+import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
 import org.kiwix.kiwixmobile.kiwixActivityComponent
 import org.kiwix.kiwixmobile.ui.KiwixDestination
@@ -102,6 +100,9 @@ class KiwixMainActivity : CoreMainActivity() {
   override val searchFragmentRoute: String = KiwixDestination.Search.route
 
   @Inject lateinit var libkiwixBookOnDisk: LibkiwixBookOnDisk
+
+  @Inject
+  lateinit var kiwixDataStore: KiwixDataStore
 
   override val mainActivity: AppCompatActivity by lazy { this }
   override val appName: String by lazy { getString(R.string.app_name) }
@@ -158,7 +159,9 @@ class KiwixMainActivity : CoreMainActivity() {
         uiCoroutineScope = uiCoroutineScope,
         enableLeftDrawer = enableLeftDrawer.value,
         shouldShowBottomAppBar = shouldShowBottomAppBar.value,
-        bottomAppBarScrollBehaviour = bottomAppBarScrollBehaviour
+        bottomAppBarScrollBehaviour = bottomAppBarScrollBehaviour,
+        viewModelFactory = viewModelFactory,
+        alertDialogShower = alertDialogShower
       )
       LaunchedEffect(Unit) {
         // Load the menu when UI is attached to screen.
@@ -192,14 +195,13 @@ class KiwixMainActivity : CoreMainActivity() {
   private fun runMigrations() {
     lifecycleScope.launch {
       migrateInternalToPublicAppDirectory()
+      migratedToPerAppLanguage()
     }
     // run the migration on background thread to avoid any UI related issues.
     CoroutineScope(Dispatchers.IO).launch {
-      if (!sharedPreferenceUtil.prefIsTest) {
-        (applicationContext as KiwixApp).kiwixComponent
-          .provideObjectBoxDataMigrationHandler()
-          .migrate()
-      }
+      (applicationContext as KiwixApp).kiwixComponent
+        .provideObjectBoxDataMigrationHandler()
+        .migrate()
     }
   }
 
@@ -237,12 +239,21 @@ class KiwixMainActivity : CoreMainActivity() {
     if (!kiwixDataStore.isAppDirectoryMigrated.first()) {
       val storagePath =
         getStorageDeviceList()
-          .getOrNull(sharedPreferenceUtil.storagePosition)
+          .getOrNull(kiwixDataStore.selectedStoragePosition.first())
           ?.name
       storagePath?.let {
-        sharedPreferenceUtil.putPrefStorage(sharedPreferenceUtil.getPublicDirectoryPath(it))
+        kiwixDataStore.setSelectedStorage(kiwixDataStore.getPublicDirectoryPath(it))
         kiwixDataStore.setAppDirectoryMigrated(true)
       }
+    }
+  }
+
+  private suspend fun migratedToPerAppLanguage() {
+    if (!kiwixDataStore.perAppLanguageMigrated.first()) {
+      AppCompatDelegate.setApplicationLocales(
+        LocaleListCompat.forLanguageTags(kiwixDataStore.prefLanguage.first())
+      )
+      kiwixDataStore.putPerAppLanguageMigration(true)
     }
   }
 
@@ -265,25 +276,9 @@ class KiwixMainActivity : CoreMainActivity() {
 
   override fun onStart() {
     super.onStart()
-    if (!sharedPreferenceUtil.prefIsTest) {
-      sharedPreferenceUtil.setIsPlayStoreBuildType(BuildConfig.IS_PLAYSTORE)
-    }
     lifecycleScope.launch {
-      setDefaultDeviceLanguage()
-    }
-  }
-
-  private suspend fun setDefaultDeviceLanguage() {
-    if (kiwixDataStore.deviceDefaultLanguage.first().isEmpty()) {
-      ConfigurationCompat.getLocales(
-        applicationContext.resources.configuration
-      )[0]?.language?.let {
-        kiwixDataStore.setDeviceDefaultLanguage(it)
-        handleLocaleChange(
-          this,
-          kiwixDataStore.prefLanguage.first(),
-          kiwixDataStore
-        )
+      if (!kiwixDataStore.prefIsTest.first()) {
+        kiwixDataStore.setIsPlayStoreBuild(BuildConfig.IS_PLAYSTORE)
       }
     }
   }
@@ -438,27 +433,6 @@ class KiwixMainActivity : CoreMainActivity() {
       ),
       NavOptions.Builder().setPopUpTo(searchFragmentRoute, inclusive = true).build()
     )
-  }
-
-  override fun openPage(
-    pageUrl: String,
-    zimReaderSource: ZimReaderSource?,
-    shouldOpenInNewTab: Boolean
-  ) {
-    var zimFileUri = ""
-    if (zimReaderSource != null) {
-      zimFileUri = zimReaderSource.toDatabase()
-    }
-    val navOptions = NavOptions.Builder()
-      .setLaunchSingleTop(true)
-      .setPopUpTo(readerFragmentRoute, inclusive = true)
-      .build()
-    // Navigate to reader screen.
-    navigate(KiwixDestination.Reader.route, navOptions)
-    // Set arguments on current destination(reader).
-    setNavigationResultOnCurrent(zimFileUri, ZIM_FILE_URI_KEY)
-    setNavigationResultOnCurrent(pageUrl, PAGE_URL_KEY)
-    setNavigationResultOnCurrent(shouldOpenInNewTab, SHOULD_OPEN_IN_NEW_TAB)
   }
 
   override fun hideBottomAppBar() {

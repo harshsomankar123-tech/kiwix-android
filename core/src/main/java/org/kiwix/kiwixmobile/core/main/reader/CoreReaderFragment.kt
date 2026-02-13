@@ -95,11 +95,11 @@ import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
 import org.kiwix.kiwixmobile.core.dao.LibkiwixBookmarks
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
-import org.kiwix.kiwixmobile.core.downloader.downloadManager.ZERO
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.consumeObservable
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.hasNotificationPermission
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.observeNavigationResult
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.requestNotificationPermission
+import org.kiwix.kiwixmobile.core.extensions.runSafelyInLifecycleScope
 import org.kiwix.kiwixmobile.core.extensions.snack
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.extensions.update
@@ -116,8 +116,6 @@ import org.kiwix.kiwixmobile.core.main.KiwixTextToSpeech.OnInitSucceedListener
 import org.kiwix.kiwixmobile.core.main.KiwixTextToSpeech.OnSpeakingListener
 import org.kiwix.kiwixmobile.core.main.KiwixWebView
 import org.kiwix.kiwixmobile.core.main.MainRepositoryActions
-import org.kiwix.kiwixmobile.core.main.ServiceWorkerUninitialiser
-import org.kiwix.kiwixmobile.core.main.UNINITIALISER_ADDRESS
 import org.kiwix.kiwixmobile.core.main.WebViewCallback
 import org.kiwix.kiwixmobile.core.main.WebViewProvider
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_DEEP_LINK_SCHEME
@@ -144,16 +142,16 @@ import org.kiwix.kiwixmobile.core.ui.theme.White
 import org.kiwix.kiwixmobile.core.utils.DonationDialogHandler
 import org.kiwix.kiwixmobile.core.utils.DonationDialogHandler.ShowDonationDialogCallback
 import org.kiwix.kiwixmobile.core.utils.ExternalLinkOpener
+import org.kiwix.kiwixmobile.core.utils.HUNDERED
 import org.kiwix.kiwixmobile.core.utils.LanguageUtils
 import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.getCurrentLocale
-import org.kiwix.kiwixmobile.core.utils.LanguageUtils.Companion.handleLocaleChange
 import org.kiwix.kiwixmobile.core.utils.REQUEST_POST_NOTIFICATION_PERMISSION
 import org.kiwix.kiwixmobile.core.utils.REQUEST_STORAGE_PERMISSION
-import org.kiwix.kiwixmobile.core.utils.SharedPreferenceUtil
 import org.kiwix.kiwixmobile.core.utils.StyleUtils.getAttributes
 import org.kiwix.kiwixmobile.core.utils.TAG_FILE_SEARCHED
 import org.kiwix.kiwixmobile.core.utils.TAG_FILE_SEARCHED_NEW_TAB
 import org.kiwix.kiwixmobile.core.utils.TAG_KIWIX
+import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
@@ -191,10 +189,6 @@ abstract class CoreReaderFragment :
 
   @JvmField
   @Inject
-  var sharedPreferenceUtil: SharedPreferenceUtil? = null
-
-  @JvmField
-  @Inject
   var kiwixDataStore: KiwixDataStore? = null
 
   @JvmField
@@ -222,9 +216,6 @@ abstract class CoreReaderFragment :
   var donationDialogHandler: DonationDialogHandler? = null
   protected var currentWebViewIndex by mutableStateOf(0)
   private var currentTtsWebViewIndex = 0
-  private var isFirstTimeMainPageLoaded = true
-
-  @Volatile var isFromManageExternalLaunch = false
   private val savingTabsMutex = Mutex()
   private var searchItemToOpen: SearchItemToOpen? = null
   private var findInPageTitle: String? = null
@@ -356,12 +347,12 @@ abstract class CoreReaderFragment :
            *  1) User has previously checked on "Don't ask me again", and/or
            *  2) Permission has been disabled on device
            */
-          requireActivity().toast(
+          context?.toast(
             string.ext_storage_permission_rationale_add_note,
             Toast.LENGTH_LONG
           )
         } else {
-          requireActivity().toast(
+          context?.toast(
             string.ext_storage_write_permission_denied_add_note,
             Toast.LENGTH_LONG
           )
@@ -375,7 +366,7 @@ abstract class CoreReaderFragment :
 
   fun runSafelyInCoreReaderLifecycleScope(func: suspend CoroutineScope.() -> Unit) {
     runCatching {
-      coreReaderLifeCycleScope?.launch { func.invoke(this) }
+      coreReaderLifeCycleScope?.runSafelyInLifecycleScope { func.invoke(this) }
     }.onFailure { it.printStackTrace() }
   }
 
@@ -434,6 +425,13 @@ abstract class CoreReaderFragment :
     savedInstanceState: Bundle?
   ) {
     super.onViewCreated(view, savedInstanceState)
+    // Initialize TTS as early as possible in the screen lifecycle.
+    // The reader can create WebView instances from multiple code paths (tabs, bookmarks,
+    // history restore, etc.). Since the `TTSJavaScriptInterface` is attached at WebView
+    // creation time for the Read Aloud feature, the TTS engine must be initialized before
+    // any suspend or asynchronous operation that may create or load a WebView. This ensures
+    // the TTS interface is available before any page JavaScript is executed.
+    setUpTTS()
     readerMenuState = createMainMenu()
     composeView?.apply {
       setContent {
@@ -507,7 +505,6 @@ abstract class CoreReaderFragment :
     activity?.let {
       compatCallback = CompatFindActionModeCallback(it)
     }
-    setUpTTS()
     setupDocumentParser()
     loadPrefs()
     updateTitle()
@@ -1077,7 +1074,6 @@ abstract class CoreReaderFragment :
   private fun handleLocaleCheck() {
     runSafelyInCoreReaderLifecycleScope {
       kiwixDataStore?.let {
-        handleLocaleChange(requireActivity(), it)
         LanguageUtils(requireActivity()).changeFont(requireActivity(), it)
       }
     }
@@ -1186,7 +1182,6 @@ abstract class CoreReaderFragment :
         }
         setUpWithTextToSpeech(it)
         documentParser?.initInterface(it)
-        ServiceWorkerUninitialiser(::openMainPage).initInterface(it)
       }
       return webView
     }
@@ -1213,7 +1208,6 @@ abstract class CoreReaderFragment :
       attrs ?: throw IllegalArgumentException("AttributeSet must not be null"),
       requireNotNull(readerScreenState.value.fullScreenItem.second),
       CoreWebViewClient(this, requireNotNull(zimReaderContainer)),
-      requireNotNull(sharedPreferenceUtil),
       requireNotNull(kiwixDataStore)
     )
   }
@@ -1389,30 +1383,32 @@ abstract class CoreReaderFragment :
 
   @Suppress("NestedBlockDepth")
   override fun onReadAloudMenuClicked() {
-    if (requireActivity().hasNotificationPermission(sharedPreferenceUtil)) {
-      if (readerScreenState.value.showTtsControls) {
-        // currently TTS is running
-        if (isBackToTopEnabled) {
-          showBackToTopButton()
-        }
-        tts?.stop()
-      } else {
-        // TTS is not running.
-        if (isBackToTopEnabled) {
-          hideBackToTopButton()
-        }
-        readerScreenState.update {
-          copy(pauseTtsButtonText = context?.getString(string.tts_pause).orEmpty())
-        }
-        if (tts?.isInitialized == false) {
-          isReadSelection = false
-          tts?.initializeTTS()
+    runSafelyInCoreReaderLifecycleScope {
+      if (requireActivity().hasNotificationPermission(kiwixDataStore)) {
+        if (readerScreenState.value.showTtsControls) {
+          // currently TTS is running
+          if (isBackToTopEnabled) {
+            showBackToTopButton()
+          }
+          tts?.stop()
         } else {
-          startReadAloud()
+          // TTS is not running.
+          if (isBackToTopEnabled) {
+            hideBackToTopButton()
+          }
+          readerScreenState.update {
+            copy(pauseTtsButtonText = context?.getString(string.tts_pause).orEmpty())
+          }
+          if (tts?.isInitialized == false) {
+            isReadSelection = false
+            tts?.initializeTTS()
+          } else {
+            startReadAloud()
+          }
         }
+      } else {
+        requestNotificationPermission()
       }
-    } else {
-      requestNotificationPermission()
     }
   }
 
@@ -1436,8 +1432,10 @@ abstract class CoreReaderFragment :
   }
 
   override fun onAddNoteMenuClicked() {
-    if (requestExternalStorageWritePermissionForNotes()) {
-      showAddNoteDialog()
+    runSafelyInCoreReaderLifecycleScope {
+      if (requestExternalStorageWritePermissionForNotes()) {
+        showAddNoteDialog()
+      }
     }
   }
 
@@ -1482,9 +1480,9 @@ abstract class CoreReaderFragment :
   }
 
   @Suppress("NestedBlockDepth")
-  private fun requestExternalStorageWritePermissionForNotes(): Boolean {
+  private suspend fun requestExternalStorageWritePermissionForNotes(): Boolean {
     var isPermissionGranted = false
-    if (sharedPreferenceUtil?.isPlayStoreBuildWithAndroid11OrAbove() == false &&
+    if (kiwixDataStore?.isPlayStoreBuildWithAndroid11OrAbove() == false &&
       Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
     ) {
       if (requireActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -1542,12 +1540,7 @@ abstract class CoreReaderFragment :
     )
   }
 
-  suspend fun openZimFile(
-    zimReaderSource: ZimReaderSource,
-    isCustomApp: Boolean = false,
-    isFromManageExternalLaunch: Boolean = false
-  ) {
-    this.isFromManageExternalLaunch = isFromManageExternalLaunch
+  suspend fun openZimFile(zimReaderSource: ZimReaderSource, isCustomApp: Boolean = false) {
     if (isCustomApp || hasPermission(Manifest.permission.READ_EXTERNAL_STORAGE)) {
       if (zimReaderSource.canOpenInLibkiwix()) {
         // Show content if there is `Open Library` button showing
@@ -1571,8 +1564,8 @@ abstract class CoreReaderFragment :
     }
   }
 
-  private fun hasPermission(permission: String): Boolean {
-    return if (sharedPreferenceUtil?.isPlayStoreBuildWithAndroid11OrAbove() == true ||
+  private suspend fun hasPermission(permission: String): Boolean {
+    return if (kiwixDataStore?.isPlayStoreBuildWithAndroid11OrAbove() == true ||
       Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     ) {
       true
@@ -1608,10 +1601,7 @@ abstract class CoreReaderFragment :
       zimReaderContainer.setZimReaderSource(zimReaderSource, showSearchSuggestionsSpellChecked)
 
       zimReaderContainer.zimFileReader?.let { zimFileReader ->
-        // uninitialized the service worker to fix https://github.com/kiwix/kiwix-android/issues/2561
-        if (!isFromManageExternalLaunch) {
-          openArticle(UNINITIALISER_ADDRESS)
-        }
+        openMainPage()
         readerMenuState?.onFileOpened(urlIsValid())
         setUpBookmarks(zimFileReader)
       } ?: run {
@@ -1717,24 +1707,24 @@ abstract class CoreReaderFragment :
   ) {
     when (requestCode) {
       REQUEST_STORAGE_PERMISSION -> {
-        if (hasPermission(Manifest.permission.READ_EXTERNAL_STORAGE)) {
-          runSafelyInCoreReaderLifecycleScope {
+        runSafelyInCoreReaderLifecycleScope {
+          if (hasPermission(Manifest.permission.READ_EXTERNAL_STORAGE)) {
             zimReaderSource?.let { openZimFile(it) }
+          } else {
+            readerScreenState.value.snackBarHostState.snack(
+              context?.getString(string.request_storage).orEmpty(),
+              context?.getString(string.menu_settings),
+              snackbarDuration = SnackbarDuration.Long,
+              actionClick = {
+                val intent = Intent()
+                intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                val uri = Uri.fromParts("package", requireActivity().packageName, null)
+                intent.data = uri
+                startActivity(intent)
+              },
+              lifecycleScope = lifecycleScope
+            )
           }
-        } else {
-          readerScreenState.value.snackBarHostState.snack(
-            context?.getString(string.request_storage).orEmpty(),
-            context?.getString(string.menu_settings),
-            snackbarDuration = SnackbarDuration.Long,
-            actionClick = {
-              val intent = Intent()
-              intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-              val uri = Uri.fromParts("package", requireActivity().packageName, null)
-              intent.data = uri
-              startActivity(intent)
-            },
-            lifecycleScope = lifecycleScope
-          )
         }
       }
 
@@ -1797,12 +1787,15 @@ abstract class CoreReaderFragment :
 
   @Suppress("MagicNumber")
   protected open fun openHomeScreen() {
-    Handler(Looper.getMainLooper()).postDelayed({
-      if (webViewList.isEmpty()) {
-        createNewTab()
-        hideTabSwitcher()
-      }
-    }, 300)
+    runSafelyInCoreReaderLifecycleScope {
+      // Run safely because it is runs after 300 MS.
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (webViewList.isEmpty()) {
+          createNewTab()
+          hideTabSwitcher()
+        }
+      }, 300)
+    }
   }
 
   @Suppress("NestedBlockDepth")
@@ -2287,40 +2280,17 @@ abstract class CoreReaderFragment :
   }
 
   override fun webViewUrlLoading() {
-    if (sharedPreferenceUtil?.prefIsFirstRun == true && !BuildConfig.DEBUG) {
-      contentsDrawerHint()
-      sharedPreferenceUtil?.putPrefIsFirstRun(false) // It is no longer the first run
+    runSafelyInCoreReaderLifecycleScope {
+      if (kiwixDataStore?.isFirstRun?.first() == true && !BuildConfig.DEBUG) {
+        contentsDrawerHint()
+        kiwixDataStore?.setIsFirstRun(false) // It is no longer the first run
+      }
     }
   }
 
   @Suppress("MagicNumber")
   override fun webViewUrlFinishedLoading() {
     if (isAdded) {
-      // Check whether the current loaded URL is the main page URL.
-      // If the URL is the main page URL, then clear the WebView history
-      // because WebView cannot clear the history for the current page.
-      // If the current URL is a service worker URL and we clear the history,
-      // it will not remove the service worker from the history, so it will remain in the history.
-      // To clear this, we are clearing the history when the main page is loaded for the first time.
-      val mainPageUrl = zimReaderContainer?.mainPage
-      if (isFirstTimeMainPageLoaded &&
-        !isFromManageExternalLaunch &&
-        mainPageUrl?.let { getCurrentWebView()?.url?.endsWith(it) } == true
-      ) {
-        // Set isFirstTimeMainPageLoaded to false. This ensures that if the user clicks
-        // on the home menu after visiting multiple pages, the history will not be erased.
-        isFirstTimeMainPageLoaded = false
-        getCurrentWebView()?.clearHistory()
-        updateBottomToolbarArrowsAlpha()
-        // Open the main page after clearing the history because some service worker ZIM files
-        // sometimes do not load properly.
-        Handler(Looper.getMainLooper()).postDelayed({ openMainPage() }, 300)
-      }
-      if (getCurrentWebView()?.url?.endsWith(UNINITIALISER_ADDRESS) == true) {
-        // Do not save this item in history since it is only for uninitializing the service worker.
-        // Simply skip the next step.
-        return
-      }
       updateTableOfContents()
       updateBottomToolbarArrowsAlpha()
       val zimFileReader = zimReaderContainer?.zimFileReader
@@ -2372,12 +2342,11 @@ abstract class CoreReaderFragment :
     }
   }
 
-  @Suppress("MagicNumber")
   override fun webViewProgressChanged(progress: Int, webView: WebView) {
     if (isAdded) {
       updateUrlFlow()
       showProgressBarWithProgress(progress)
-      if (progress == 100) {
+      if (progress == HUNDERED) {
         hideProgressBar()
         Log.d(TAG_KIWIX, "Loaded URL: " + getCurrentWebView()?.url)
       }
@@ -2544,7 +2513,6 @@ abstract class CoreReaderFragment :
     onComplete: () -> Unit
   ) {
     try {
-      isFromManageExternalLaunch = true
       currentWebViewIndex = 0
       webViewList.removeFirstOrNull()
       webViewHistoryItemList.forEach { webViewHistoryItem ->
@@ -2639,7 +2607,7 @@ abstract class CoreReaderFragment :
   }
 
   private fun createReadAloudIntent(action: String, isPauseTTS: Boolean): Intent =
-    Intent(requireActivity(), ReadAloudService::class.java).apply {
+    Intent(context, ReadAloudService::class.java).apply {
       setAction(action)
       putExtra(
         ReadAloudService.IS_TTS_PAUSE_OR_RESUME,
@@ -2648,7 +2616,7 @@ abstract class CoreReaderFragment :
     }
 
   private fun setActionAndStartTTSService(action: String, isPauseTTS: Boolean = false) {
-    requireActivity().startService(
+    context?.startService(
       createReadAloudIntent(action, isPauseTTS)
     ).also {
       isReadAloudServiceRunning = action == ACTION_PAUSE_OR_RESUME_TTS
