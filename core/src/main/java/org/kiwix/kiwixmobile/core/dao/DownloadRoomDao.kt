@@ -49,6 +49,9 @@ abstract class DownloadRoomDao {
   lateinit var libkiwixBookOnDisk: LibkiwixBookOnDisk
 
   @Query("SELECT * FROM DownloadRoomEntity")
+  abstract fun getAllDownloadsSync(): List<DownloadRoomEntity>
+
+  @Query("SELECT * FROM DownloadRoomEntity")
   abstract fun getAllDownloads(): Flow<List<DownloadRoomEntity>>
 
   fun downloads(): Flow<List<DownloadModel>> =

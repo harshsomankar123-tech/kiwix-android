@@ -39,6 +39,7 @@ import com.tonyodev.fetch2.R.drawable
 import com.tonyodev.fetch2.Status
 import com.tonyodev.fetch2.util.DEFAULT_NOTIFICATION_TIMEOUT_AFTER_RESET
 import com.tonyodev.fetch2core.DownloadBlock
+import org.kiwix.kiwixmobile.core.utils.files.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -100,6 +101,45 @@ class DownloadMonitorService : Service() {
     setupUpdater()
     startForegroundService()
     isDownloadMonitorServiceRunning = true
+    syncRoomDbWithFetchState()
+  }
+
+  private fun syncRoomDbWithFetchState(
+    dispatcher: CoroutineDispatcher = Dispatchers.IO
+  ) {
+    scope.launch(dispatcher) {
+      val roomDownloads = downloadRoomDao.getAllDownloadsSync()
+      if (roomDownloads.isEmpty()) return@launch
+
+      // fetch.getDownloads is callback-based, so Room DB cleanup
+      // must happen inside the callback to avoid a race condition.
+      fetch.getDownloads { fetchDownloads ->
+        // CRITICAL: This callback runs on the MAIN thread.
+        // Must switch to IO dispatcher for Room DB operations.
+        scope.launch(dispatcher) {
+          val fetchDownloadIds = fetchDownloads.map { it.id }.toSet()
+          var staleEntriesRemoved = 0
+          roomDownloads.forEach { roomEntity ->
+            val downloadId = roomEntity.downloadId.toInt()
+            if (downloadId !in fetchDownloadIds) {
+              // Fetch2 has no record of this download — remove stale entry from Room DB.
+              downloadRoomDao.deleteDownloadByDownloadId(roomEntity.downloadId)
+              staleEntriesRemoved++
+              Log.d(
+                "DownloadSync",
+                "Removed stale download: ${roomEntity.bookId} (id=${roomEntity.downloadId})"
+              )
+            }
+          }
+          if (staleEntriesRemoved > 0) {
+            Log.d(
+              "DownloadSync",
+              "Cleaned up $staleEntriesRemoved stale download(s)"
+            )
+          }
+        }
+      }
+    }
   }
 
   private fun setupUpdater() {
