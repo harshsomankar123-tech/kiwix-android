@@ -43,14 +43,27 @@ import org.kiwix.kiwixmobile.core.utils.ExternalLinkOpener
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
 import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.core.utils.dialog.KiwixDialog
+import android.content.Context
+import android.content.ClipboardManager
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import org.junit.Rule
+import org.kiwix.kiwixmobile.core.utils.dialog.DialogHost
 import java.net.URL
+import androidx.compose.material3.ExperimentalMaterial3Api
 
+@OptIn(ExperimentalMaterial3Api::class)
 internal class ExternalLinkOpenerTest {
   private val kiwixDataStore: KiwixDataStore = mockk()
   private val alertDialogShower: AlertDialogShower = spyk(AlertDialogShower())
   private val packageManager: PackageManager = mockk()
   private val activity: Activity = mockk()
   private val coroutineScope = CoroutineScope(Dispatchers.Main)
+
+  @get:Rule
+  val composeTestRule = createComposeRule()
 
   @Test
   internal fun alertDialogShowerOpensLinkIfConfirmButtonIsClicked() = runTest {
@@ -68,9 +81,7 @@ internal class ExternalLinkOpenerTest {
     assertNotNull(dialogData)
     val (dialog, listeners, _) = dialogData!!
     assert(dialog == KiwixDialog.ExternalLinkPopup)
-    // Invoke confirm button (index 0)
-    @Suppress("UNCHECKED_CAST")
-    (listeners[0] as () -> Unit).invoke()
+    listeners[0].invoke()
     verify { activity.startActivity(intent) }
   }
 
@@ -90,9 +101,7 @@ internal class ExternalLinkOpenerTest {
     assertNotNull(dialogData)
     val (dialog, listeners, _) = dialogData!!
     assert(dialog == KiwixDialog.ExternalLinkPopup)
-    // Invoke confirm button (index 0)
-    @Suppress("UNCHECKED_CAST")
-    (listeners[0] as () -> Unit).invoke()
+    listeners[0].invoke()
     verify { activity.startActivity(intent) }
   }
 
@@ -110,9 +119,7 @@ internal class ExternalLinkOpenerTest {
     assertNotNull(dialogData)
     val (dialog, listeners, _) = dialogData!!
     assert(dialog == KiwixDialog.ExternalLinkPopup)
-    // Invoke dismiss button (index 1)
-    @Suppress("UNCHECKED_CAST")
-    (listeners[1] as () -> Unit).invoke()
+    listeners[1].invoke()
     verify(exactly = 0) { activity.startActivity(intent) }
   }
 
@@ -132,8 +139,7 @@ internal class ExternalLinkOpenerTest {
     val (dialog, listeners, _) = dialogData!!
     assert(dialog == KiwixDialog.ExternalLinkPopup)
     // Invoke neutral button (index 2)
-    @Suppress("UNCHECKED_CAST")
-    (listeners[2] as () -> Unit).invoke()
+    listeners[2].invoke()
     coVerify {
       kiwixDataStore.setExternalLinkPopup(false)
       activity.startActivity(intent)
@@ -237,9 +243,66 @@ internal class ExternalLinkOpenerTest {
     assertNotNull(dialogData)
     val (dialog, listeners, _) = dialogData!!
     assert(dialog == KiwixDialog.ExternalLinkPopup)
-    // Invoke confirm button (index 0) — same behavior as clicking the URI text
-    @Suppress("UNCHECKED_CAST")
-    (listeners[0] as () -> Unit).invoke()
+    listeners[0].invoke()
+    verify { activity.startActivity(intent) }
+  }
+
+  @Test
+  fun testCopyButtonCopiesUriToClipboard() {
+    val clipboardManager = mockk<ClipboardManager>(relaxed = true)
+    every { activity.getSystemService(Context.CLIPBOARD_SERVICE) } returns clipboardManager
+    val uri = Uri.parse("https://example.com/")
+
+    val dialog = KiwixDialog.ExternalLinkPopup
+    alertDialogShower.show(dialog, uri = uri)
+    composeTestRule.setContent {
+      DialogHost(alertDialogShower)
+    }
+    composeTestRule
+      .onNodeWithTag("COPY_BUTTON_TAG")
+      .performClick()
+    verify {
+      clipboardManager.setPrimaryClip(
+        match { clip ->
+          clip.getItemAt(0).text.toString() == "https://example.com/"
+        }
+      )
+    }
+  }
+
+  @Test
+  fun testDialogButtonTextDoesNotWrap() {
+    val longText = "This is a very long button text that would normally wrap to multiple lines"
+    val dialog = KiwixDialog.ExternalRedirectDialog(longText)
+    alertDialogShower.show(dialog, uri = Uri.parse("https://example.com"))
+    composeTestRule.setContent {
+      DialogHost(alertDialogShower)
+    }
+    composeTestRule
+      .onNodeWithText(longText, substring = true)
+      .assertExists()
+  }
+
+  @Test
+  fun testClickingUriTextOpensExternalLinkAndDismissesDialog() = runTest {
+    every { packageManager.resolveActivity(any(), any<Int>()) } returns ResolveInfo()
+    every { kiwixDataStore.externalLinkPopup } returns flowOf(true)
+    val url = URL("https://example.com/")
+    val uri = Uri.parse(url.toString())
+    val intent = Intent(Intent.ACTION_VIEW, uri)
+
+    justRun { activity.startActivity(intent) }
+
+    val externalLinkOpener = ExternalLinkOpener(activity, kiwixDataStore).apply {
+      setAlertDialogShower(alertDialogShower)
+    }
+    externalLinkOpener.openExternalUrl(intent, lifecycleScope = coroutineScope)
+    composeTestRule.setContent {
+      DialogHost(alertDialogShower)
+    }
+    composeTestRule
+      .onNodeWithTag("ALERT_DIALOG_URI_TEXT_TESTING_TAG")
+      .performClick()
     verify { activity.startActivity(intent) }
   }
 }
