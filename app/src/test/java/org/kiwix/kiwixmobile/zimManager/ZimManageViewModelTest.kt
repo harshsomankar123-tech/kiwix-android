@@ -151,10 +151,14 @@ class ZimManageViewModelTest {
         val expectedList = listOf(bookOnDisk())
         testFlow(
           viewModel.fileSelectListStates.asFlow(),
-          triggerAction = { booksOnDiskListItems.emit(expectedList) },
+          triggerAction = {
+            booksOnDiskListItems.emit(expectedList)
+            advanceUntilIdle()
+          },
           assert = {
             skipItems(1)
             assertThat(awaitItem()).isEqualTo(FileSelectListState(expectedList))
+            cancelAndIgnoreRemainingEvents()
           }
         )
       }
@@ -166,6 +170,8 @@ class ZimManageViewModelTest {
         every { application.getString(any()) } returns ""
         val expectedBook = bookOnDisk(1L, libkiwixBook("1", nativeBook = BookTestWrapper("1")))
         val bookToRemove = bookOnDisk(1L, libkiwixBook("2", nativeBook = BookTestWrapper("2")))
+        advanceUntilIdle()
+        books.emit(listOf(bookToRemove))
         booksOnFileSystem.emit(
           listOfNotNull(
             expectedBook.book.nativeBook,
@@ -173,8 +179,9 @@ class ZimManageViewModelTest {
             bookToRemove.book.nativeBook
           )
         )
-        books.emit(listOf(bookToRemove))
         viewModel.requestFileSystemCheck.emit(Unit)
+        advanceUntilIdle()
+        yield()
         advanceUntilIdle()
         coVerify {
           libkiwixBookOnDisk.insert(listOfNotNull(expectedBook.book.nativeBook))
@@ -184,6 +191,7 @@ class ZimManageViewModelTest {
   }
 
   @Nested
+
   inner class SideEffects {
     @Test
     fun `RequestNavigateTo offers OpenFileWithNavigation with selected books`() = flakyTest {
