@@ -49,7 +49,6 @@ import org.kiwix.kiwixmobile.data.remote.opds.KiwixOpdsServiceFactory
 interface KiwixComponent {
   fun activityComponentBuilder(): KiwixActivityComponent.Builder
   fun serviceComponent(): Builder
-  fun inject(storageSelectDialog: StorageSelectDialog)
   fun providesOnlineLibraryManager(): OnlineLibraryManager
   fun provideObjectBoxDataMigrationHandler(): ObjectBoxDataMigrationHandler
   fun provideFileOperationHandler(): FileOperationHandler
