@@ -56,11 +56,22 @@ import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.SelectionMode
 import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.SelectionMode.MULTI
 import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.SelectionMode.NORMAL
 import org.kiwix.kiwixmobile.language.viewmodel.flakyTest
+<<<<<<< HEAD
+=======
+import org.kiwix.sharedFunctions.MainDispatcherRule
+import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState
+import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState.CanWrite4GbFile
+import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState.CannotWrite4GbFile
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.MultiModeFinished
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestDeleteMultiSelection
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestMultiSelection
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestNavigateTo
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestSelect
+<<<<<<< HEAD
+=======
+import org.kiwix.kiwixmobile.core.compat.CompatHelper.Companion.convertToLocal
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestShareMultiSelection
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestValidateZimFiles
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RestartActionMode
@@ -103,6 +114,12 @@ class ZimManageViewModelTest {
 
   @RegisterExtension
   private val mainDispatcherRule = MainDispatcherRule()
+<<<<<<< HEAD
+=======
+  private val testDispatcher get() = mainDispatcherRule.dispatcher
+  private val onlineLibraryManager = mockk<OnlineLibraryManager>(relaxed = true)
+  private val onlineLibraryServiceFactory = mockk<OnlineLibraryServiceFactory>()
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
 
   @AfterEach
   fun teardown() {
@@ -135,6 +152,13 @@ class ZimManageViewModelTest {
         storageObserver,
         application,
         dataSource,
+<<<<<<< HEAD
+=======
+        connectivityManager,
+        onlineLibraryManager,
+        kiwixDataStore,
+        onlineLibraryServiceFactory,
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
         mainDispatcherRule.dispatcher
       ).apply {
         setAlertDialogShower(alertDialogShower)
@@ -192,6 +216,293 @@ class ZimManageViewModelTest {
 
   @Nested
 
+<<<<<<< HEAD
+=======
+    @Test
+    fun `library section title adapts to selected language count`() = flakyTest {
+      runTest(testDispatcher) {
+        every { application.getString(R.string.all_languages) } returns "All languages"
+        every {
+          application.getString(R.string.your_language, any())
+        } answers {
+          val args = secondArg<Array<Any>>()
+          "Selected language: ${args[0]}"
+        }
+        every { application.getString(R.string.your_languages) } returns "Selected languages:"
+
+        // All languages (blank)
+        val allTitle = viewModel.getOnlineLibrarySectionTitle("")
+        assertThat(allTitle).isEqualTo("All languages")
+
+        // Single language
+        val singleTitle = viewModel.getOnlineLibrarySectionTitle("eng")
+        assertThat(singleTitle).contains("Selected language:")
+        assertThat(singleTitle).contains("English")
+
+        // Multiple languages
+        val multiTitle = viewModel.getOnlineLibrarySectionTitle("eng,fra,deu")
+        assertThat(multiTitle).contains("Selected languages:")
+        // Locale("eng").displayLanguage returns "English" but
+        // Locale("fra") and Locale("deu") may return raw codes on some JVMs
+        assertThat(multiTitle).contains("eng".convertToLocal().displayLanguage)
+        assertThat(multiTitle).contains("fra".convertToLocal().displayLanguage)
+        assertThat(multiTitle).contains("deu".convertToLocal().displayLanguage)
+      }
+    }
+  }
+
+  @Nested
+  inner class Categories {
+    @Disabled("We will refactor this in migration PR")
+    @Test
+    fun `changing category updates the filter and do the network request`() = flakyTest {
+      runTest(testDispatcher) {
+        onlineCategoryContent.value = ""
+        every { application.getString(any()) } returns ""
+        every { application.getString(any(), any()) } returns ""
+        onlineCategoryContent.emit("wikipedia")
+        advanceUntilIdle()
+        viewModel.onlineLibraryRequest.test {
+          skipItems(1)
+          onlineCategoryContent.emit("wikipedia")
+          var onlineLibraryRequest = awaitItem()
+          while (onlineLibraryRequest.category != "wikipedia") onlineLibraryRequest = awaitItem()
+          assertThat(onlineLibraryRequest.category).isEqualTo("wikipedia")
+          assertThat(onlineLibraryRequest.page).isEqualTo(ONE)
+          assertThat(onlineLibraryRequest.isLoadMoreItem).isEqualTo(false)
+          cancelAndIgnoreRemainingEvents()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `network states observed`() = flakyTest {
+    runTest(testDispatcher) {
+      networkStates.tryEmit(NOT_CONNECTED)
+      advanceUntilIdle()
+      viewModel.networkStates.test()
+        .assertValue(NOT_CONNECTED)
+    }
+  }
+
+  @Test
+  fun `updateOnlineLibraryFilters updates onlineLibraryRequest`() = flakyTest {
+    runTest(testDispatcher) {
+      viewModel.setIsUnitTestCase()
+      val newRequest = OnlineLibraryRequest(
+        query = "test",
+        category = "cat",
+        lang = "en",
+        page = 2,
+        isLoadMoreItem = true,
+        version = 100L
+      )
+      viewModel.onlineLibraryRequest.test {
+        viewModel.updateOnlineLibraryFilters(newRequest)
+        var request = awaitItem()
+        while (request != newRequest) request = awaitItem()
+        assertThat(request).isEqualTo(newRequest)
+      }
+    }
+  }
+
+  @Test
+  fun `library update removes from sources and maps to list items`() = flakyTest {
+    runTest(testDispatcher) {
+      val book = BookTestWrapper("0")
+      val bookAlreadyOnDisk =
+        libkiwixBook(id = "0", url = "", language = Locale.ENGLISH.language, nativeBook = book)
+      val bookDownloading = libkiwixBook(id = "1", url = "")
+      val bookWithActiveLanguage = libkiwixBook(id = "3", language = "activeLanguage", url = "")
+      viewModel.libraryItems.test {
+        every { application.getString(any()) } returns ""
+        every { application.getString(any(), any()) } returns ""
+        coEvery {
+          onlineLibraryManager.parseOPDSStreamAndGetBooks(any(), any())
+        } returns arrayListOf(bookWithActiveLanguage)
+        networkStates.value = CONNECTED
+        downloads.value = listOf(downloadModel(book = bookDownloading))
+        books.value = listOf(bookOnDisk(book = bookAlreadyOnDisk))
+        fileSystemStates.value = CanWrite4GbFile
+        advanceUntilIdle()
+
+        val items = awaitItem()
+        val bookItems = items.items.filterIsInstance<LibraryListItem.BookItem>()
+        if (bookItems.size >= 2 && bookItems[0].fileSystemState == CanWrite4GbFile) {
+          assertThat(items.items).isEqualTo(
+            listOf(
+              LibraryListItem.DividerItem(Long.MAX_VALUE, "Downloading:"),
+              LibraryListItem.LibraryDownloadItem(downloadModel(book = bookDownloading)),
+              LibraryListItem.DividerItem(Long.MAX_VALUE - 1, ""),
+              LibraryListItem.BookItem(bookWithActiveLanguage, CanWrite4GbFile),
+            )
+          )
+        }
+        cancelAndIgnoreRemainingEvents()
+      }
+    }
+  }
+
+  @Disabled("We will refactor this in migration PR")
+  @Test
+  fun `library marks files over 4GB as can't download if file system state says to`() = flakyTest {
+    runTest(testDispatcher) {
+      onlineContentLanguage.value = ""
+      val bookOver4Gb =
+        libkiwixBook(
+          id = "0",
+          url = "",
+          size = "${Fat32Checker.FOUR_GIGABYTES_IN_KILOBYTES + 1}"
+        )
+      every { application.getString(any()) } returns "All languages"
+      every { application.getString(any(), any()) } returns "All languages"
+      every { application.getString(any(), *anyVararg()) } returns "All languages"
+      coEvery { kiwixDataStore.selectedOnlineContentLanguage } returns flowOf("")
+      // test libraryItems fetches for all language.
+      viewModel.libraryItems.test {
+        coEvery {
+          onlineLibraryManager.parseOPDSStreamAndGetBooks(any(), any())
+        } returns arrayListOf(bookOver4Gb)
+        networkStates.value = CONNECTED
+        downloads.value = listOf()
+        books.value = listOf()
+        onlineContentLanguage.value = ""
+        fileSystemStates.emit(FileSystemState.DetectingFileSystem)
+        fileSystemStates.emit(CannotWrite4GbFile)
+        advanceUntilIdle()
+
+        awaitItem()
+        val item = awaitItem()
+        val bookItem = item.items.filterIsInstance<LibraryListItem.BookItem>().firstOrNull()
+        if (bookItem?.fileSystemState == CannotWrite4GbFile) {
+          assertThat(item.items).isEqualTo(
+            listOf(
+              LibraryListItem.DividerItem(Long.MIN_VALUE, "All languages"),
+              LibraryListItem.BookItem(bookOver4Gb, CannotWrite4GbFile)
+            )
+          )
+        }
+        cancelAndConsumeRemainingEvents()
+      }
+
+      // test library items fetches for a particular language
+      viewModel.libraryItems.test {
+        coEvery {
+          onlineLibraryManager.parseOPDSStreamAndGetBooks(any(), any())
+        } returns arrayListOf(bookOver4Gb)
+        every { application.getString(any(), any()) } returns "Selected language: English"
+        every { application.getString(any(), *anyVararg()) } returns "Selected language: English"
+        networkStates.value = CONNECTED
+        downloads.value = listOf()
+        books.value = listOf()
+        onlineContentLanguage.value = "eng"
+        fileSystemStates.emit(FileSystemState.DetectingFileSystem)
+        fileSystemStates.emit(CannotWrite4GbFile)
+        advanceUntilIdle()
+
+        val item = awaitItem()
+        val bookItem = item.items.filterIsInstance<LibraryListItem.BookItem>().firstOrNull()
+        if (bookItem?.fileSystemState == CannotWrite4GbFile) {
+          assertThat(item.items).isEqualTo(
+            listOf(
+              LibraryListItem.DividerItem(Long.MIN_VALUE, "Selected language: English"),
+              LibraryListItem.BookItem(bookOver4Gb, CannotWrite4GbFile)
+            )
+          )
+        }
+        cancelAndConsumeRemainingEvents()
+      }
+    }
+
+    @Test
+    fun `library shows selected language section title correctly`() = flakyTest {
+      runTest(testDispatcher) {
+        val bookOver4Gb =
+          libkiwixBook(
+            id = "0",
+            url = "",
+            size = "${Fat32Checker.FOUR_GIGABYTES_IN_KILOBYTES + 1}"
+          )
+        every { application.getString(any()) } answers { "" }
+        every { application.getString(any(), any()) } answers { "" }
+        every { application.getString(any(), *anyVararg()) } answers { "Selected language: English" }
+
+        // test libraryItems fetches for all language.
+        viewModel.libraryItems.test {
+          coEvery {
+            onlineLibraryManager.parseOPDSStreamAndGetBooks(any(), any())
+          } returns arrayListOf(bookOver4Gb)
+          networkStates.value = CONNECTED
+          downloads.value = listOf()
+          books.value = listOf()
+          onlineContentLanguage.value = "eng"
+          yield()
+          fileSystemStates.emit(FileSystemState.DetectingFileSystem)
+          fileSystemStates.emit(CannotWrite4GbFile)
+          advanceUntilIdle()
+
+          var matched = false
+          while (!matched) {
+            val item = awaitItem()
+            val bookItem = item.items.filterIsInstance<LibraryListItem.BookItem>().firstOrNull()
+            if (bookItem?.fileSystemState == CannotWrite4GbFile) {
+              assertThat(item.items).isEqualTo(
+                listOf(
+                  LibraryListItem.DividerItem(Long.MIN_VALUE, "Selected language: English"),
+                  LibraryListItem.BookItem(bookOver4Gb, CannotWrite4GbFile)
+                )
+              )
+              matched = true
+            }
+          }
+          cancelAndConsumeRemainingEvents()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `library shows downloading books even when not in online source`() = flakyTest {
+    runTest(testDispatcher) {
+      val downloadingBook = libkiwixBook(id = "10", url = "")
+      val bookInOnlineList = libkiwixBook(id = "20", url = "")
+      val downloadModel = downloadModel(book = downloadingBook)
+
+      every { application.getString(any()) } returns "Downloading"
+      every { application.getString(any(), any()) } returns "All languages"
+      every { application.getString(any(), *anyVararg()) } returns "All languages"
+
+      viewModel.libraryItems.test {
+        coEvery {
+          onlineLibraryManager.parseOPDSStreamAndGetBooks(any(), any())
+        } returns arrayListOf(bookInOnlineList)
+        networkStates.value = CONNECTED
+        downloads.value = listOf(downloadModel)
+        books.value = listOf()
+        onlineContentLanguage.value = ""
+        fileSystemStates.value = CanWrite4GbFile
+        advanceUntilIdle()
+
+        val items = awaitItem()
+        val bookItems = items.items.filterIsInstance<LibraryListItem.BookItem>()
+        if (bookItems.size >= 2) {
+          assertThat(items.items).isEqualTo(
+            listOf(
+              LibraryListItem.DividerItem(Long.MAX_VALUE, "Downloading"),
+              LibraryListItem.LibraryDownloadItem(downloadModel),
+              LibraryListItem.DividerItem(Long.MIN_VALUE, "All languages"),
+              LibraryListItem.BookItem(bookInOnlineList, CanWrite4GbFile)
+            )
+          )
+        }
+        cancelAndIgnoreRemainingEvents()
+      }
+    }
+  }
+
+  @Nested
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
   inner class SideEffects {
     @Test
     fun `RequestNavigateTo offers OpenFileWithNavigation with selected books`() = flakyTest {
@@ -407,3 +718,39 @@ class BookTestWrapper(private val id: String) : Book(0L) {
   override fun equals(other: Any?): Boolean = other is BookTestWrapper && getId() == other.getId()
   override fun hashCode(): Int = getId().hashCode()
 }
+<<<<<<< HEAD
+=======
+
+const val MOCKK_TIMEOUT_FOR_VERIFICATION = 1000L
+
+private class TestZimManageViewModel(
+  downloadDao: DownloadRoomDao,
+  libkiwixBookOnDisk: LibkiwixBookOnDisk,
+  storageObserver: StorageObserver,
+  kiwixService: KiwixService,
+  context: Application,
+  connectivityBroadcastReceiver: ConnectivityBroadcastReceiver,
+  fat32Checker: Fat32Checker,
+  dataSource: DataSource,
+  connectivityManager: ConnectivityManager,
+  onlineLibraryManager: OnlineLibraryManager,
+  kiwixDataStore: KiwixDataStore,
+  onlineLibraryServiceFactory: OnlineLibraryServiceFactory,
+  ioDispatcher: CoroutineDispatcher
+) : ZimManageViewModel(
+    downloadDao,
+    libkiwixBookOnDisk,
+    storageObserver,
+    kiwixService,
+    context,
+    connectivityBroadcastReceiver,
+    fat32Checker,
+    dataSource,
+    connectivityManager,
+    onlineLibraryManager,
+    kiwixDataStore,
+    onlineLibraryServiceFactory,
+    ioDispatcher
+  )
+
+>>>>>>> 45f2a833d (fix: address PR #4705 review comments and fix CI test failures)
