@@ -100,11 +100,13 @@ class CategoryViewModelTest {
     every { kiwixDataStore.selectedOnlineContentCategory } returns flowOf("")
     coEvery { kiwixService.getCategories() } returns CategoryFeed()
     coEvery { kiwixDataStore.saveOnlineCategoryList(any()) } just Runs
+    coEvery { kiwixService.getCategories() } returns CategoryFeed()
   }
 
   private fun createViewModel() {
+    CategoryViewModel.isTest = true
     categoryViewModel =
-      TestCategoryViewModel(
+      CategoryViewModel(
         application,
         kiwixDataStore,
         kiwixService,
@@ -209,6 +211,7 @@ class CategoryViewModelTest {
       createViewModel()
 
       advanceUntilIdle() // Wait for coroutines to settle
+
 
       categoryViewModel.state.test {
         val error = awaitItemOfType<State.Error>()
@@ -348,21 +351,5 @@ class CategoryViewModelTest {
         assertThat(effect.categories.map { it.category }).containsExactly("Wikipedia")
       }
     }
-  }
-
-  class TestCategoryViewModel(
-    context: Application,
-    kiwixDataStore: KiwixDataStore,
-    kiwixService: KiwixService,
-    connectivityBroadcastReceiver: ConnectivityBroadcastReceiver
-  ) : CategoryViewModel(
-      context,
-      kiwixDataStore,
-      kiwixService,
-      connectivityBroadcastReceiver
-    ) {
-    override var isUnitTestCase: Boolean
-      get() = true
-      set(value) {}
   }
 }
