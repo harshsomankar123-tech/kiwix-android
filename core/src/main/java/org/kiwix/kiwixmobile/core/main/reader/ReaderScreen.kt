@@ -55,9 +55,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -789,18 +790,20 @@ fun TabSwitcherView(
   onTabClickListener: TabClickListener,
   onCloseAllTabs: () -> Unit
 ) {
-  val state = rememberLazyListState()
+  val state = rememberLazyGridState()
   Box(modifier = Modifier.fillMaxSize()) {
-    LazyRow(
+    LazyVerticalGrid(
+      columns = GridCells.Fixed(2),
       modifier = Modifier
-        .fillMaxWidth()
-        .align(Alignment.TopCenter)
-        .padding(top = SIXTEEN_DP),
-      contentPadding = PaddingValues(horizontal = SIXTEEN_DP, vertical = EIGHT_DP),
+        .fillMaxSize()
+        .padding(top = EIGHT_DP),
+      contentPadding = PaddingValues(horizontal = TWELVE_DP, vertical = EIGHT_DP),
       horizontalArrangement = Arrangement.spacedBy(EIGHT_DP),
+      verticalArrangement = Arrangement.spacedBy(EIGHT_DP),
       state = state
     ) {
-      itemsIndexed(webViews, key = { _, item -> item.hashCode() }) { index, webView ->
+      items(webViews.size, key = { webViews[it].hashCode() }) { index ->
+        val webView = webViews[index]
         val context = LocalContext.current
         val title = remember(webView) {
           webView.title?.fromHtml()?.toString()
@@ -817,6 +820,7 @@ fun TabSwitcherView(
       }
     }
     LaunchedEffect(Unit) {
+      // Scroll to the row containing the selected tab (2 columns per row)
       state.animateScrollToItem(selectedIndex)
     }
     CloseAllTabButton(onCloseAllTabs)
@@ -828,7 +832,6 @@ private fun BoxScope.CloseAllTabButton(onCloseAllTabs: () -> Unit) {
   var isAnimating by remember { mutableStateOf(false) }
   var isDone by remember { mutableStateOf(false) }
 
-  // Animate rotation from 0f to 360f
   val rotation by animateFloatAsState(
     targetValue = if (isAnimating) 360f else 0f,
     animationSpec = tween(durationMillis = 600),
@@ -838,7 +841,6 @@ private fun BoxScope.CloseAllTabButton(onCloseAllTabs: () -> Unit) {
     }
   )
 
-  // ⏳ Auto-reset to close icon after delay
   LaunchedEffect(isDone) {
     if (isDone) {
       delay(CLOSE_TAB_ICON_ANIMATION_TIMEOUT)
@@ -890,101 +892,64 @@ fun TabItemView(
   modifier: Modifier = Modifier,
   onTabClickListener: TabClickListener
 ) {
-  val cardElevation = if (isSelected) EIGHT_DP else TWO_DP
   val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-  val (cardWidth, cardHeight) = getTabCardSize(toolbarHeightDp = KIWIX_TOOLBAR_HEIGHT)
-  Box(modifier = modifier) {
-    Column(
-      horizontalAlignment = Alignment.CenterHorizontally,
-      modifier = Modifier
-        .padding(horizontal = EIGHT_DP, vertical = FOUR_DP)
-        .width(cardWidth)
-    ) {
-      TabItemHeader(title, index, onTabClickListener)
-      TabItemCard(
-        webView,
-        cardWidth,
-        cardHeight,
-        onTabClickListener,
-        borderColor,
-        cardElevation,
-        index
-      )
-    }
-  }
-}
+  val cardElevation = if (isSelected) EIGHT_DP else TWO_DP
+  val (_, cardHeight) = getTabCardSize(toolbarHeightDp = KIWIX_TOOLBAR_HEIGHT)
 
-@Composable
-private fun TabItemHeader(
-  title: String,
-  index: Int,
-  onTabClickListener: TabClickListener
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = FOUR_DP),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Text(
-      text = title,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier
-        .padding(end = FOUR_DP)
-        .weight(1f)
-        .semantics { testTag = TAB_TITLE_TESTING_TAG },
-      style = MaterialTheme.typography.labelSmall
-    )
-    IconButton(
-      onClick = { onTabClickListener.onCloseTab(index) },
-      modifier = Modifier.size(CLOSE_TAB_ICON_SIZE)
-    ) {
-      Icon(
-        painter = painterResource(id = R.drawable.ic_clear_white_24dp),
-        contentDescription = stringResource(R.string.close_tab) + index
-      )
-    }
-  }
-}
-
-@Composable
-private fun TabItemCard(
-  webView: KiwixWebView,
-  cardWidth: Dp,
-  cardHeight: Dp,
-  onTabClickListener: TabClickListener,
-  borderColor: Color,
-  elevation: Dp,
-  index: Int
-) {
   Card(
-    elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-    border = BorderStroke(ONE_DP, borderColor),
-    shape = MaterialTheme.shapes.extraSmall,
-    modifier = Modifier
-      .width(cardWidth)
+    elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+    border = BorderStroke(if (isSelected) TWO_DP else ONE_DP, borderColor),
+    shape = RoundedCornerShape(TWELVE_DP),
+    modifier = modifier
+      .fillMaxWidth()
       .height(cardHeight)
-      .semantics { hideFromAccessibility() }
   ) {
-    AndroidView(
-      factory = { context ->
-        FrameLayout(context).apply {
-          (webView.parent as? ViewGroup)?.removeView(webView)
-          addView(webView)
-          val clickableView = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            // Prevent clicking inside the webView when tabs are active.
-            setOnClickListener { onTabClickListener.onSelectTab(index) }
-            contentDescription = "${webView.contentDescription}${webView.hashCode()}"
-          }
-          addView(clickableView)
+    Column(modifier = Modifier.fillMaxSize()) {
+      // Title header inside the card
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(start = TWELVE_DP, end = FOUR_DP, top = FOUR_DP, bottom = FOUR_DP),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = title,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier
+            .weight(1f)
+            .semantics { testTag = TAB_TITLE_TESTING_TAG },
+          style = MaterialTheme.typography.labelMedium
+        )
+        IconButton(
+          onClick = { onTabClickListener.onCloseTab(index) },
+          modifier = Modifier.size(CLOSE_TAB_ICON_SIZE)
+        ) {
+          Icon(
+            painter = painterResource(id = R.drawable.ic_clear_white_24dp),
+            contentDescription = stringResource(R.string.close_tab) + index
+          )
         }
-      },
-      modifier = Modifier
-        .fillMaxSize()
-        .semantics { hideFromAccessibility() }
-    )
+      }
+      // WebView preview fills remaining space
+      AndroidView(
+        factory = { context ->
+          FrameLayout(context).apply {
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            addView(webView)
+            val clickableView = View(context).apply {
+              layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+              setOnClickListener { onTabClickListener.onSelectTab(index) }
+              contentDescription = "${webView.contentDescription}${webView.hashCode()}"
+            }
+            addView(clickableView)
+          }
+        },
+        modifier = Modifier
+          .fillMaxSize()
+          .semantics { hideFromAccessibility() }
+      )
+    }
   }
 }
 
@@ -997,7 +962,7 @@ fun getTabCardSize(toolbarHeightDp: Dp): Pair<Dp, Dp> {
   val screenHeight = with(density) { windowSize.height.toDp() }
 
   val cardWidth = screenWidth / 2
-  val cardHeight = ((screenHeight - toolbarHeightDp) / 2).coerceAtLeast(HUNDERED.dp)
+  val cardHeight = ((screenHeight - toolbarHeightDp) / 3).coerceAtLeast(HUNDERED.dp)
 
   return cardWidth to cardHeight
 }

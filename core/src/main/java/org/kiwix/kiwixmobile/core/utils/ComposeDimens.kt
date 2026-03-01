@@ -193,6 +193,9 @@ object ComposeDimens {
   const val READER_BOTTOM_APP_BAR_DISABLE_BUTTON_ALPHA = 0.38f
   val SEARCH_PLACEHOLDER_TEXT_SIZE = 12.sp
   val DONATION_LAYOUT_MAXIMUM_WIDTH = 400.dp
+  val TAB_ITEM_ROW_HEIGHT = 56.dp
+  val TAB_ITEM_ICON_SIZE = 24.dp
+  const val TAB_ITEM_SELECTED_ALPHA = 0.12f
 
   // MainActivity dimens
   val NAVIGATION_DRAWER_WIDTH = 280.dp
