@@ -26,7 +26,11 @@ import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.app.PendingIntent.FLAG_UPDATE_CURRENT
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
@@ -77,7 +81,23 @@ class DownloadMonitorService : Service() {
   private val notificationManager: NotificationManager by lazy {
     getSystemService(NOTIFICATION_SERVICE) as NotificationManager
   }
+  private val connectivityManager: ConnectivityManager by lazy {
+    getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+  }
   private val downloadNotificationsBuilderMap = mutableMapOf<Int, NotificationCompat.Builder>()
+
+  /**
+   * Network callback to detect when the network becomes available again.
+   * When the network is restored, this immediately resumes all paused/queued downloads,
+   * bypassing Fetch library's internal backoff delay which can take 10-15 seconds.
+   *
+   * See https://github.com/kiwix/kiwix-android/issues/4748
+   */
+  private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    override fun onAvailable(network: Network) {
+      resumeDownloadsOnNetworkGain()
+    }
+  }
 
   @Inject
   lateinit var fetch: Fetch
@@ -99,6 +119,7 @@ class DownloadMonitorService : Service() {
     fetch.addListener(fetchListener, true)
     setupUpdater()
     startForegroundService()
+    registerNetworkCallback()
     isDownloadMonitorServiceRunning = true
   }
 
@@ -109,6 +130,40 @@ class DownloadMonitorService : Service() {
           task.invoke()
         }.onFailure { it.printStackTrace() }
       }
+    }
+  }
+
+  private fun registerNetworkCallback() {
+    runCatching {
+      val networkRequest = NetworkRequest.Builder().build()
+      connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+    }.onFailure { it.printStackTrace() }
+  }
+
+  private fun unregisterNetworkCallback() {
+    runCatching {
+      connectivityManager.unregisterNetworkCallback(networkCallback)
+    }.onFailure { it.printStackTrace() }
+  }
+
+  /**
+   * Resumes all downloads that are waiting on the network.
+   *
+   * When the Fetch library detects a network loss, it internally pauses downloads
+   * and waits using an increasing backoff time before retrying. This method bypasses
+   * that delay by actively resuming downloads as soon as the network is restored.
+   */
+  private fun resumeDownloadsOnNetworkGain() {
+    scope.launch {
+      runCatching {
+        fetch.getDownloadsWithStatus(
+          listOf(Status.PAUSED, Status.QUEUED)
+        ) { downloads ->
+          downloads.forEach { download ->
+            fetch.resume(download.id)
+          }
+        }
+      }.onFailure { it.printStackTrace() }
     }
   }
 
@@ -494,6 +549,7 @@ class DownloadMonitorService : Service() {
   @OptIn(ExperimentalCoroutinesApi::class)
   private fun stopForegroundServiceForDownloads() {
     updaterJob?.cancel()
+    unregisterNetworkCallback()
     fetch.removeListener(fetchListener)
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
