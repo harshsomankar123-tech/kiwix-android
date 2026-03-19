@@ -38,7 +38,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
+
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -149,7 +149,6 @@ class ZimManageViewModelTest {
 
   @Suppress("LongMethod")
   @BeforeEach
-  @Suppress("LongMethod")
   fun init() {
     Dispatchers.setMain(testDispatcher)
     clearAllMocks()
@@ -414,9 +413,8 @@ class ZimManageViewModelTest {
     }
   }
 
-  @Suppress("LongMethod")
-  @Test
   @Suppress("LongMethod", "MaxLineLength")
+  @Test
   fun `library marks files over 4GB as can't download if file system state says to`() = flakyTest {
     runTest {
       val bookOver4Gb =
@@ -699,15 +697,12 @@ suspend fun <T> TestScope.testFlow(
   assert: suspend TurbineTestContext<T>.() -> Unit,
   timeout: Duration? = null
 ) {
-  val job = launch {
-    flow.test(timeout = timeout) {
-      triggerAction()
-      assert()
-      cancelAndIgnoreRemainingEvents()
-      ensureAllEventsConsumed()
-    }
+  flow.test(timeout = timeout) {
+    triggerAction()
+    assert()
+    cancelAndIgnoreRemainingEvents()
+    ensureAllEventsConsumed()
   }
-  job.join()
 }
 
 class BookTestWrapper(private val id: String) : Book(0L) {
