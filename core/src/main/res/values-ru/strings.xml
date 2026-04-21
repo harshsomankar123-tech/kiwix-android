@@ -90,7 +90,6 @@
   <string name="pref_display_title">Экран</string>
   <string name="pref_info_title">Информация</string>
   <string name="pref_info_version">Версия</string>
-  <string name="pref_theme_summary">Показать статьи инвертированными цветами</string>
   <string name="pref_back_to_top">Вернуться наверх</string>
   <string name="pref_back_to_top_summary">Отобразить кнопку в конце страницы для прокрутки вверх</string>
   <string name="pref_language_title">Язык</string>
@@ -323,7 +322,7 @@
   <string name="delete_selected_bookmarks">Удалить выбранные закладки?</string>
   <string name="import_bookmarks_dialog_title">Импортировать закладки?</string>
   <string name="export_all_bookmarks_dialog_title">Экспортировать все закладки?</string>
-  <string name="export_all_bookmarks_dialog_message">Экспорт создаст файл bookmark.xml в папке Download/org.kiwix…/</string>
+  <string name="export_all_bookmarks_dialog_message" fuzzy="true">Экспорт создаст файл bookmark.xml в папке \n%s</string>
   <string name="bookmark_imported_message">Все закладки импортированы.</string>
   <string name="error_invalid_bookmark_file">Ошибка: Выбранный файл не является допустимым файлом закладок.</string>
   <string name="send_report">Отправить отчёт диагностики</string>

@@ -95,7 +95,6 @@
   <string name="theme_system">Sistema</string>
   <string name="theme_light">Claro</string>
   <string name="theme_dark">Oscuro</string>
-  <string name="pref_theme_summary">Mostrar artículos con colores invertidos</string>
   <string name="pref_back_to_top">Volver al principio</string>
   <string name="pref_back_to_top_summary">Mostrar un botón al final de la página para desplazarse al comienzo</string>
   <string name="pref_language_title">Idioma</string>
@@ -336,7 +335,7 @@
   <string name="delete_selected_bookmarks">¿Eliminar los marcadores seleccionados?</string>
   <string name="import_bookmarks_dialog_title">¿Importar marcadores?</string>
   <string name="export_all_bookmarks_dialog_title">¿Exportar todos los marcadores?</string>
-  <string name="export_all_bookmarks_dialog_message">Exportar generará un archivo llamado bookmark.xml en la carpeta Descargas/org.kiwix…/.</string>
+  <string name="export_all_bookmarks_dialog_message">Exportar generará un archivo llamado bookmark.xml en la carpeta \n%s.</string>
   <string name="bookmark_imported_message">Todos los marcadores han sido exportados.</string>
   <string name="error_invalid_bookmark_file">Error: El archivo seleccionado no es un archivo de marcador válido.</string>
   <string name="send_report">Enviar informe de diagnóstico</string>

@@ -79,7 +79,6 @@
   <string name="theme_system">Sistem</string>
   <string name="theme_light">Terang</string>
   <string name="theme_dark">Gelap</string>
-  <string name="pref_theme_summary">Tampilkan artikel dengan warna terbalik</string>
   <string name="pref_back_to_top">Kembali ke Atas</string>
   <string name="pref_back_to_top_summary">Tampilkan tombol di akhir halaman untuk menggulir ke atas</string>
   <string name="pref_language_title">Bahasa</string>
@@ -316,7 +315,7 @@
   <string name="delete_selected_bookmarks">Hapus Markah Buku Terpilih?</string>
   <string name="import_bookmarks_dialog_title">Impor Markah?</string>
   <string name="export_all_bookmarks_dialog_title">Ekspor Sema Markah?</string>
-  <string name="export_all_bookmarks_dialog_message">Mengekspor akan menghasilkan berkas bookmark.xml dalam folder Unduh/org.kiwix…/.</string>
+  <string name="export_all_bookmarks_dialog_message" fuzzy="true">Mengekspor akan menghasilkan berkas bookmark.xml dalam folder \n%s.</string>
   <string name="bookmark_imported_message">Semua markah telah diimpor.</string>
   <string name="error_invalid_bookmark_file">Kesalahan: Berkas yang dipilih bukan berkas markah yang sah.</string>
   <string name="send_report">Kirim laporan diagnostik</string>

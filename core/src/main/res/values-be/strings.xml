@@ -6,6 +6,7 @@
 * MohitMali
 * No Sleep till Krupki
 * Plaga med
+* Ucukor
 * ZlyiLev
 -->
 <resources>
@@ -29,7 +30,6 @@
   <string name="pref_display_title">Паказаць</string>
   <string name="pref_info_title">Інфармацыя</string>
   <string name="pref_info_version">Версія</string>
-  <string name="pref_theme_summary">Паказаць артыкулы з «павернутымі колерамі»</string>
   <string name="pref_back_to_top">Вярнуцца ўверх</string>
   <string name="pref_back_to_top_summary">Паказваць кнопку ў канцы старонкі для пракруткі ўверх</string>
   <string name="pref_language_title">Мова</string>
@@ -47,7 +47,7 @@
   <string name="clear_all_history_dialog_title">Ачысціць усю гісторыю?</string>
   <string name="share">Падзяліцца</string>
   <string name="delete">Выдаліць</string>
-  <string name="cancel">Адмена</string>
+  <string name="cancel">Скасаваць</string>
   <string name="got_it">Зразумела</string>
   <string name="undo">Адмяніць</string>
   <string name="bookmark_added">Закладка дададзеная</string>

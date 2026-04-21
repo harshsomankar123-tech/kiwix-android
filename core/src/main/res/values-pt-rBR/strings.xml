@@ -92,7 +92,6 @@
   <string name="theme_system">Sistema</string>
   <string name="theme_light">Claro</string>
   <string name="theme_dark">Escuro</string>
-  <string name="pref_theme_summary">Mostrar artigos com cores invertidas</string>
   <string name="pref_back_to_top">Voltar ao Topo</string>
   <string name="pref_back_to_top_summary">Mostra um botão no fim da página para voltar ao topo</string>
   <string name="pref_language_title">Idioma</string>
@@ -333,7 +332,7 @@
   <string name="delete_selected_bookmarks">Excluir favoritos selecionados?</string>
   <string name="import_bookmarks_dialog_title">Importar Marcadores?</string>
   <string name="export_all_bookmarks_dialog_title">Exportar todos os Marcadores?</string>
-  <string name="export_all_bookmarks_dialog_message">Exportar irá gerar o arquivo bookmark.xml na pasta Download/org.kiwix…/</string>
+  <string name="export_all_bookmarks_dialog_message">Exportar irá gerar o arquivo bookmark.xml na pasta \n%s</string>
   <string name="bookmark_imported_message">Todos os favoritos foram importados.</string>
   <string name="error_invalid_bookmark_file">Erro: O arquivo selecionado não é um arquivo de favoritos válido.</string>
   <string name="send_report">Enviar relatório de diagnóstico</string>

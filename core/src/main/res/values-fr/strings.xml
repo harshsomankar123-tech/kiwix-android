@@ -100,7 +100,6 @@
   <string name="theme_system">Système</string>
   <string name="theme_light">Clair</string>
   <string name="theme_dark">Sombre</string>
-  <string name="pref_theme_summary">Afficher les articles en couleurs inversées</string>
   <string name="pref_back_to_top">Retour en haut</string>
   <string name="pref_back_to_top_summary">Afficher un bouton en bas de la page pour revenir en haut</string>
   <string name="pref_language_title">Langue</string>
@@ -341,7 +340,7 @@
   <string name="delete_selected_bookmarks">Supprimer les marque-pages sélectionnés ?</string>
   <string name="import_bookmarks_dialog_title">Importer les marque-pages ?</string>
   <string name="export_all_bookmarks_dialog_title">Exporter tous les marque-pages ?</string>
-  <string name="export_all_bookmarks_dialog_message">L’exportation générera un fichier bookmark.xml dans le dossier Download/org.kiwix…/.</string>
+  <string name="export_all_bookmarks_dialog_message">L’exportation générera un fichier bookmark.xml dans le dossier \n%s..</string>
   <string name="bookmark_imported_message">Tous les marque-pages ont été importés.</string>
   <string name="error_invalid_bookmark_file">Erreur : le fichier sélectionné n’est pas un fichier de marque-pages valide.</string>
   <string name="send_report">Envoyer un rapport de diagnostic</string>

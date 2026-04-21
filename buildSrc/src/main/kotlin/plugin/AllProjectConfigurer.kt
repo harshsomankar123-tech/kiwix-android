@@ -101,6 +101,7 @@ class AllProjectConfigurer {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         unitTests.apply {
           isReturnDefaultValues = true
+          isIncludeAndroidResources = true
           all {
             it.also { testTask ->
               testTask.useJUnitPlatform()
@@ -211,6 +212,8 @@ class AllProjectConfigurer {
       implementation(Libs.multidex)
       implementation(Libs.logging_interceptor)
       implementation(Libs.retrofit)
+      testImplementation(Libs.TURBINE_FLOW_TEST)
+      testImplementation(Libs.kotlinx_coroutines_test)
       testImplementation(Libs.junit_jupiter)
       testImplementation(Libs.mockk)
       testImplementation(Libs.assertj_core)
@@ -245,6 +248,7 @@ class AllProjectConfigurer {
       implementation(Libs.COMPOSE_NAVIGATION)
       implementation(Libs.LIFECYCLE_VIEWMODEL_COMPOSE)
       implementation(Libs.LIFECYCLE_VIEWMODEL_KTX)
+      implementation(Libs.ACCOMPANIST)
 
       // Jetpack Datastore
       implementation(Libs.DATASTORE)
@@ -252,8 +256,14 @@ class AllProjectConfigurer {
       // Compose UI test implementation
       androidTestImplementation(Libs.COMPOSE_UI_TEST_JUNIT)
       androidTestImplementation(Libs.COMPOSE_UI_TEST_JUNIT_ACCESSIBILITY)
+      testImplementation(Libs.COMPOSE_UI_TEST_JUNIT)
       debugImplementation(Libs.COMPOSE_UI_MANIFEST)
       debugImplementation(Libs.COMPOSE_TOOLING)
+
+      // Robolectric unit testing
+      testImplementation(Libs.robolectric)
+      testImplementation(Libs.androidx_test_core)
+      testImplementation(Libs.junit_vintage_engine)
     }
   }
 }

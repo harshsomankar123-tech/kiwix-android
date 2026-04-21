@@ -51,7 +51,7 @@ import org.kiwix.kiwixmobile.core.main.HELP_SCREEN
 import org.kiwix.kiwixmobile.core.main.HISTORY_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.INTRO_SCREEN
 import org.kiwix.kiwixmobile.core.main.LANGUAGE_SCREEN
-import org.kiwix.kiwixmobile.core.main.LOCAL_FILE_TRANSFER_FRAGMENT
+import org.kiwix.kiwixmobile.core.main.LOCAL_FILE_TRANSFER_SCREEN
 import org.kiwix.kiwixmobile.core.main.LOCAL_LIBRARY_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.NOTES_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.READER_FRAGMENT
@@ -60,9 +60,12 @@ import org.kiwix.kiwixmobile.core.main.SETTINGS_SCREEN
 import org.kiwix.kiwixmobile.core.main.ZIM_FILE_URI_KEY
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_FRAGMENT
 import org.kiwix.kiwixmobile.core.main.ZIM_HOST_NAV_DEEP_LINK
-import org.kiwix.kiwixmobile.core.page.bookmark.BookmarksFragment
-import org.kiwix.kiwixmobile.core.page.history.HistoryFragment
-import org.kiwix.kiwixmobile.core.page.notes.NotesFragment
+import org.kiwix.kiwixmobile.core.page.bookmark.BookmarkScreenRoute
+import org.kiwix.kiwixmobile.core.page.bookmark.viewmodel.BookmarkViewModel
+import org.kiwix.kiwixmobile.core.page.history.HistoryScreenRoute
+import org.kiwix.kiwixmobile.core.page.history.viewmodel.HistoryViewModel
+import org.kiwix.kiwixmobile.core.page.notes.NotesScreenRoute
+import org.kiwix.kiwixmobile.core.page.notes.viewmodel.NotesViewModel
 import org.kiwix.kiwixmobile.core.search.NAV_ARG_SEARCH_STRING
 import org.kiwix.kiwixmobile.core.search.SearchFragment
 import org.kiwix.kiwixmobile.core.settings.SettingsScreenRoute
@@ -72,7 +75,8 @@ import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
 import org.kiwix.kiwixmobile.help.KiwixHelpViewModel
 import org.kiwix.kiwixmobile.intro.IntroScreenRoute
 import org.kiwix.kiwixmobile.language.LanguageScreenRoute
-import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferFragment
+import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferScreenRoute
+import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferViewModel
 import org.kiwix.kiwixmobile.localFileTransfer.URIS_KEY
 import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryFragment
 import org.kiwix.kiwixmobile.nav.destination.library.online.OnlineLibraryFragment
@@ -124,14 +128,20 @@ fun KiwixNavGraph(
       }
     }
     composable(KiwixDestination.Bookmarks.route) {
-      FragmentContainer(R.id.bookmarksFragmentContainer) {
-        BookmarksFragment()
-      }
+      val bookmarkViewModel: BookmarkViewModel = viewModel(factory = viewModelFactory)
+      BookmarkScreenRoute(
+        navigateBack = navController::popBackStack,
+        viewModel = bookmarkViewModel,
+        alertDialogShower = alertDialogShower
+      )
     }
     composable(KiwixDestination.Notes.route) {
-      FragmentContainer(R.id.notesFragmentContainer) {
-        NotesFragment()
-      }
+      val notesViewModel: NotesViewModel = viewModel(factory = viewModelFactory)
+      NotesScreenRoute(
+        navigateBack = navController::popBackStack,
+        notesViewModel = notesViewModel,
+        alertDialogShower = alertDialogShower
+      )
     }
     composable(KiwixDestination.Intro.route) {
       IntroScreenRoute(
@@ -145,9 +155,12 @@ fun KiwixNavGraph(
       )
     }
     composable(KiwixDestination.History.route) {
-      FragmentContainer(R.id.historyFragmentContainer) {
-        HistoryFragment()
-      }
+      val historyViewModel: HistoryViewModel = viewModel(factory = viewModelFactory)
+      HistoryScreenRoute(
+        navigateBack = navController::popBackStack,
+        viewModel = historyViewModel,
+        alertDialogShower = alertDialogShower
+      )
     }
     composable(KiwixDestination.Language.route) {
       LanguageScreenRoute(
@@ -209,6 +222,7 @@ fun KiwixNavGraph(
         }
       }
     }
+
     composable(
       route = KiwixDestination.LocalFileTransfer.route,
       arguments = listOf(
@@ -219,22 +233,21 @@ fun KiwixNavGraph(
         }
       )
     ) { backStackEntry ->
-      val urisParam = backStackEntry.arguments?.getString(URIS_KEY)
-      val uris: List<Uri>? =
-        urisParam?.takeIf { it != "null" }?.split(",")?.map {
-          Uri.decode(it).toUri()
-        }
+      val uris: List<Uri> = backStackEntry.arguments
+        ?.getString(URIS_KEY)
+        ?.takeIf { it != "null" }
+        ?.split(",")
+        ?.map { Uri.decode(it).toUri() }
+        .orEmpty()
 
-      FragmentContainer(R.id.localFileTransferFragmentContainer) {
-        LocalFileTransferFragment().apply {
-          arguments = Bundle().apply {
-            putParcelableArray(
-              URIS_KEY,
-              uris?.toTypedArray()
-            )
-          }
-        }
-      }
+      val viewModel: LocalFileTransferViewModel = viewModel(factory = viewModelFactory)
+      viewModel.initialize(uris, alertDialogShower)
+
+      LocalFileTransferScreenRoute(
+        navigateBack = navController::popBackStack,
+        viewModel = viewModel,
+        alertDialogShower = alertDialogShower
+      )
     }
   }
 }
@@ -307,12 +320,12 @@ sealed class KiwixDestination(val route: String) {
     }
   }
 
-  object LocalFileTransfer : KiwixDestination("$LOCAL_FILE_TRANSFER_FRAGMENT?$URIS_KEY={uris}") {
+  object LocalFileTransfer : KiwixDestination("$LOCAL_FILE_TRANSFER_SCREEN?$URIS_KEY={$URIS_KEY}") {
     fun createRoute(uris: String? = null): String {
       return if (uris != null) {
-        "$LOCAL_FILE_TRANSFER_FRAGMENT?$URIS_KEY=${Uri.encode(uris)}"
+        "$LOCAL_FILE_TRANSFER_SCREEN?$URIS_KEY=${Uri.encode(uris)}"
       } else {
-        "$LOCAL_FILE_TRANSFER_FRAGMENT?$URIS_KEY=null"
+        "$LOCAL_FILE_TRANSFER_SCREEN?$URIS_KEY=null"
       }
     }
   }

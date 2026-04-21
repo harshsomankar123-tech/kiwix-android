@@ -74,8 +74,8 @@ import org.kiwix.kiwixmobile.core.extensions.snack
 import org.kiwix.kiwixmobile.core.extensions.toast
 import org.kiwix.kiwixmobile.core.extensions.update
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
-import org.kiwix.kiwixmobile.core.navigateToAppSettings
-import org.kiwix.kiwixmobile.core.navigateToSettings
+import org.kiwix.kiwixmobile.core.extensions.navigateToAppSettings
+import org.kiwix.kiwixmobile.core.extensions.navigateToSettings
 import org.kiwix.kiwixmobile.core.page.SEARCH_ICON_TESTING_TAG
 import org.kiwix.kiwixmobile.core.ui.components.NavigationIcon
 import org.kiwix.kiwixmobile.core.ui.components.ONE
@@ -289,7 +289,8 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
         },
         bottomAppBarScrollBehaviour = (requireActivity() as CoreMainActivity).bottomAppBarScrollBehaviour,
         navHostController = (requireActivity() as CoreMainActivity).navController,
-        onUserBackPressed = { onUserBackPressed() }
+        onUserBackPressed = { onUserBackPressed() },
+        zimManageViewModel = zimManageViewModel
       )
       DialogHost(alertDialogShower)
     }
@@ -793,7 +794,7 @@ class OnlineLibraryFragment : BaseFragment(), FragmentActivityExtensions {
         onSelectAction = ::storeDeviceInPreferences
         titleSize = STORAGE_SELECT_STORAGE_TITLE_TEXTVIEW_SIZE
         setStorageDeviceList(storageDeviceList)
-        setShouldShowCheckboxSelected(false)
+        setShouldShowStorageSelected(false)
       }
       .show(parentFragmentManager, getString(string.choose_storage_to_download_book))
 

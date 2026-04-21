@@ -85,7 +85,6 @@
   <string name="theme_system">Sistema</string>
   <string name="theme_light">Chiaro</string>
   <string name="theme_dark">Scuro</string>
-  <string name="pref_theme_summary">Visualizza le voci con colori invertiti</string>
   <string name="pref_back_to_top">Torna all’inizio</string>
   <string name="pref_back_to_top_summary">Mostra un pulsante alla fine della pagina per scorrere fino all’inizio</string>
   <string name="pref_language_title">Lingua</string>
@@ -114,6 +113,9 @@
   <string name="pref_clear_all_bookmarks_title">Cancella i segnalibri</string>
   <string name="clear_all_history_dialog_title">Vuoi cancellare tutta la cronologia?</string>
   <string name="share">Condividi</string>
+  <string name="share_article">Condividi voce</string>
+  <string name="unable_to_share_article">Impossibile condividere la voce</string>
+  <string name="please_wait_for_page_to_load">Attendi che la pagina si carichi completamente</string>
   <string name="selected_file_cab_app_chooser_title">Condividi file ZIM con:</string>
   <string name="delete">Cancella</string>
   <string name="cancel">Annulla</string>
@@ -326,7 +328,7 @@
   <string name="delete_selected_bookmarks">Vuoi cancellare i segnalibri selezionati?</string>
   <string name="import_bookmarks_dialog_title">Importare segnalibri?</string>
   <string name="export_all_bookmarks_dialog_title">Esportare tutti i segnalibri?</string>
-  <string name="export_all_bookmarks_dialog_message">L\'esportazione genererà il file bookmark.xml nella cartella Download/org.kiwix…/</string>
+  <string name="export_all_bookmarks_dialog_message">L\'esportazione genererà il file bookmark.xml nella cartella \n%s</string>
   <string name="bookmark_imported_message">Tutti i segnalibri sono stati importati.</string>
   <string name="error_invalid_bookmark_file">Errore: il file selezionato non è un file segnalibro valido.</string>
   <string name="send_report">Invia report di diagnostica</string>

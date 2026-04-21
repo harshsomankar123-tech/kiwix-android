@@ -25,7 +25,6 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -33,7 +32,9 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -72,6 +73,8 @@ import org.kiwix.kiwixmobile.core.data.remote.KiwixService
 import org.kiwix.kiwixmobile.core.data.remote.KiwixService.Companion.ITEMS_PER_PAGE
 import org.kiwix.kiwixmobile.core.data.remote.ProgressResponseBody
 import org.kiwix.kiwixmobile.core.data.remote.UserAgentInterceptor
+import org.kiwix.kiwixmobile.core.di.IoDispatcher
+import org.kiwix.kiwixmobile.core.di.OPDSKiwixService
 import org.kiwix.kiwixmobile.core.di.modules.CALL_TIMEOUT
 import org.kiwix.kiwixmobile.core.di.modules.CONNECTION_TIMEOUT
 import org.kiwix.kiwixmobile.core.di.modules.KIWIX_OPDS_LIBRARY_URL
@@ -128,18 +131,20 @@ const val MAX_PROGRESS = 100
 
 const val THREE = 3
 
+@Suppress("LargeClass")
 class ZimManageViewModel @Inject constructor(
   private val downloadDao: DownloadRoomDao,
   private val libkiwixBookOnDisk: LibkiwixBookOnDisk,
   private val storageObserver: StorageObserver,
-  private var kiwixService: KiwixService,
+  @OPDSKiwixService private var kiwixService: KiwixService,
   val context: Application,
   private val connectivityBroadcastReceiver: ConnectivityBroadcastReceiver,
   private val fat32Checker: Fat32Checker,
   private val dataSource: DataSource,
   private val connectivityManager: ConnectivityManager,
   val onlineLibraryManager: OnlineLibraryManager,
-  private val kiwixDataStore: KiwixDataStore
+  private val kiwixDataStore: KiwixDataStore,
+  @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
   sealed class FileSelectActions {
     data class RequestNavigateTo(val bookOnDisk: BookOnDisk) : FileSelectActions()
@@ -151,6 +156,10 @@ class ZimManageViewModel @Inject constructor(
     object MultiModeFinished : FileSelectActions()
     object RestartActionMode : FileSelectActions()
     object UserClickedDownloadBooksButton : FileSelectActions()
+  }
+
+  sealed class OnlineLibraryUiEvent {
+    object ScrollToTop : OnlineLibraryUiEvent()
   }
 
   data class OnlineLibraryRequest(
@@ -175,8 +184,6 @@ class ZimManageViewModel @Inject constructor(
 
   private lateinit var validateZimViewModel: ValidateZimViewModel
 
-  @Suppress("InjectDispatcher")
-  private var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
   private var isUnitTestCase: Boolean = false
   val sideEffects: MutableSharedFlow<SideEffect<*>> = MutableSharedFlow()
   private val _libraryItems =
@@ -213,6 +220,8 @@ class ZimManageViewModel @Inject constructor(
   )
   val requestFileSystemCheck = MutableSharedFlow<Unit>(replay = 0)
   val fileSelectActions = MutableSharedFlow<FileSelectActions>()
+  private val _onlineLibraryEvent = MutableSharedFlow<OnlineLibraryUiEvent>()
+  val onlineLibraryEvent: SharedFlow<OnlineLibraryUiEvent> = _onlineLibraryEvent.asSharedFlow()
   private val requestDownloadLibrary = MutableSharedFlow<OnlineLibraryRequest>(
     replay = 0,
     extraBufferCapacity = 1,
@@ -251,6 +260,12 @@ class ZimManageViewModel @Inject constructor(
   fun setAlertDialogShower(alertDialogShower: AlertDialogShower) {
     this.alertDialogShower = alertDialogShower
   }
+
+  // This method will be updated in OnlineLibraryScreen migration
+  fun sendUiEvent(uiEvent: OnlineLibraryUiEvent) =
+    viewModelScope.launch {
+      _onlineLibraryEvent.emit(uiEvent)
+    }
 
   private fun createKiwixServiceWithProgressListener(
     baseUrl: String,
@@ -451,7 +466,9 @@ class ZimManageViewModel @Inject constructor(
               is RequestNavigateTo -> OpenFileWithNavigation(action.bookOnDisk)
               is RequestMultiSelection -> startMultiSelectionAndSelectBook(action.bookOnDisk)
               RequestDeleteMultiSelection -> DeleteFiles(selectionsFromState(), alertDialogShower)
-              RequestShareMultiSelection -> ShareFiles(selectionsFromState())
+              RequestShareMultiSelection ->
+                ShareFiles(selectionsFromState(), viewModelScope, ioDispatcher)
+
               RequestValidateZimFiles ->
                 ValidateZIMFiles(selectionsFromState(), alertDialogShower, validateZimViewModel)
 
@@ -565,6 +582,9 @@ class ZimManageViewModel @Inject constructor(
             }
           )
           onlineLibraryResult.emit(newResult)
+          if (!result.onlineLibraryRequest.isLoadMoreItem) {
+            sendUiEvent(OnlineLibraryUiEvent.ScrollToTop)
+          }
         }
     }
   }.flowOn(ioDispatcher)

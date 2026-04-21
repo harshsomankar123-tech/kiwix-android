@@ -75,7 +75,6 @@
   <string name="theme_system">כמו המערכת</string>
   <string name="theme_light">בהירה</string>
   <string name="theme_dark">כהה</string>
-  <string name="pref_theme_summary">הצגת ערכים עם צבעים הפוכים</string>
   <string name="pref_back_to_top">חזרה למעלה</string>
   <string name="pref_back_to_top_summary">הצגת כפתור בסוף העמוד לגלילה למעלה</string>
   <string name="pref_language_title">שפה</string>
@@ -316,7 +315,7 @@
   <string name="delete_selected_bookmarks">למחוק את המועדפים שנבחרו?</string>
   <string name="import_bookmarks_dialog_title">לייבא סימניות?</string>
   <string name="export_all_bookmarks_dialog_title">לייצא את כל הסימניות?</string>
-  <string name="export_all_bookmarks_dialog_message">יצוא ייצור קובץ bookmark.xml בתיקייה Download/org.kiwix…/.</string>
+  <string name="export_all_bookmarks_dialog_message">פעולת הייצוא תיצור קובץ bookmark.xml בתיקייה \n%s.</string>
   <string name="bookmark_imported_message">כל הסימניות יובאו.</string>
   <string name="error_invalid_bookmark_file">שגיאה: הקובץ שנבחר אינו קובץ סימניות תקין.</string>
   <string name="send_report">שליחת דוח אבחון</string>

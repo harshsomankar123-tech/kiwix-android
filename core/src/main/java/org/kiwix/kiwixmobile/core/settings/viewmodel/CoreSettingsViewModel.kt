@@ -53,7 +53,6 @@ import org.kiwix.kiwixmobile.core.dao.LibkiwixBookmarks
 import org.kiwix.kiwixmobile.core.data.DataSource
 import org.kiwix.kiwixmobile.core.extensions.runSafelyInLifecycleScope
 import org.kiwix.kiwixmobile.core.extensions.toast
-import org.kiwix.kiwixmobile.core.main.AddNoteDialog
 import org.kiwix.kiwixmobile.core.main.CoreMainActivity
 import org.kiwix.kiwixmobile.core.settings.StorageCalculator
 import org.kiwix.kiwixmobile.core.settings.viewmodel.Action.ExportBookmarks
@@ -233,16 +232,19 @@ abstract class CoreSettingsViewModel(
       .getPackageInformation(context.packageName, ZERO).versionName.toString()
 
   fun clearHistory() {
-    runCatching {
-      viewModelScope.launch { dataSource.clearHistory() }
-      sendAction(
-        ShowSnackbar(
-          context.getString(R.string.all_history_cleared),
-          viewModelScope
+    viewModelScope.launch {
+      runCatching {
+        dataSource.clearHistory()
+      }.onSuccess {
+        sendAction(
+          ShowSnackbar(
+            context.getString(R.string.all_history_cleared),
+            viewModelScope
+          )
         )
-      )
-    }.onFailure {
-      Log.e("SettingsPresenter", it.message, it)
+      }.onFailure {
+        Log.e("SettingsPresenter", it.message, it)
+      }
     }
   }
 
@@ -266,10 +268,20 @@ abstract class CoreSettingsViewModel(
         )
         return@launch
       }
-      if (File(AddNoteDialog.NOTES_DIRECTORY).deleteRecursively()) {
+      runCatching {
+        dataSource.clearNotes()
+      }.onSuccess {
         sendAction(
           ShowSnackbar(
             context.getString(R.string.notes_deletion_successful),
+            viewModelScope
+          )
+        )
+      }.onFailure {
+        Log.e("SettingsPresenter", it.message, it)
+        sendAction(
+          ShowSnackbar(
+            context.getString(R.string.notes_deletion_unsuccessful),
             viewModelScope
           )
         )
@@ -356,7 +368,7 @@ abstract class CoreSettingsViewModel(
       DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
       true
     } catch (ignore: Exception) {
-      android.util.Log.e("IMPORT_BOOKMARKS", "Invalid XML file", ignore)
+      Log.e("IMPORT_BOOKMARKS", "Invalid XML file", ignore)
       false
     }
   }

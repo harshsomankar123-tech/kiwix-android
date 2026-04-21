@@ -69,7 +69,6 @@
   <string name="pref_display_title">Afișaj</string>
   <string name="pref_info_title">Informații</string>
   <string name="pref_info_version">Versiune</string>
-  <string name="pref_theme_summary">Afișează articolele în culori inversate</string>
   <string name="pref_back_to_top">Începutul paginii</string>
   <string name="pref_back_to_top_summary">Afișează un buton la sfârșitul paginii pentru a reveni la începutul acesteia</string>
   <string name="pref_language_title">Limba</string>
@@ -307,7 +306,7 @@
   <string name="delete_selected_bookmarks">Ștergeți Semnele de Carte Selectate?</string>
   <string name="import_bookmarks_dialog_title">Importă Semnele de carte?</string>
   <string name="export_all_bookmarks_dialog_title">Exportă Toate Semnele de Carte?</string>
-  <string name="export_all_bookmarks_dialog_message">Exportarea va genera fișierul bookmark.xml în folderul Download/org.kiwix…/.</string>
+  <string name="export_all_bookmarks_dialog_message" fuzzy="true">Exportarea va genera fișierul bookmark.xml în folderul \n%s.</string>
   <string name="bookmark_imported_message">Toate semnele de carte au fost importate.</string>
   <string name="error_invalid_bookmark_file">Eroare: Fișierul selectat nu este un fișier de semn de carte valid.</string>
   <string name="send_report">Trimite raport de diagnostic</string>

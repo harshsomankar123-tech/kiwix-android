@@ -27,6 +27,7 @@
   <string name="menu_about_app">Over de app %s</string>
   <string name="external_redirect_message">U wordt nu naar ons %s doorverwezen.</string>
   <string name="support_donation_platform">donatieplatform</string>
+  <string name="about_app_page">pagina over de app</string>
   <string name="menu_wifi_hotspot">WiFi-hotspot</string>
   <string name="save_media">Media opslaan</string>
   <string name="save_media_error">Er is een fout opgetreden bij het opslaan van de media!</string>
@@ -79,7 +80,6 @@
   <string name="theme_system">Systeem</string>
   <string name="theme_light">Licht</string>
   <string name="theme_dark">Donker</string>
-  <string name="pref_theme_summary">Artikelen weergeven met omgekeerde kleuren</string>
   <string name="pref_back_to_top">Terug naar boven</string>
   <string name="pref_back_to_top_summary">Aan het einde van de pagina een knop weergeven om terug te gaan naar het begin</string>
   <string name="pref_language_title">Taal</string>
@@ -108,6 +108,9 @@
   <string name="pref_clear_all_bookmarks_title">Bladwijzers wissen</string>
   <string name="clear_all_history_dialog_title">Alle geschiedenis wissen?</string>
   <string name="share">Delen</string>
+  <string name="share_article">Pagina delen</string>
+  <string name="unable_to_share_article">Pagina kan niet worden gedeeld</string>
+  <string name="please_wait_for_page_to_load">Wacht even tot de pagina volledig is geladen</string>
   <string name="selected_file_cab_app_chooser_title">ZIM-bestanden delen met:</string>
   <string name="delete">Verwijderen</string>
   <string name="cancel">Annuleren</string>
@@ -320,7 +323,7 @@
   <string name="delete_selected_bookmarks">Geselecteerde bladwijzers verwijderen?</string>
   <string name="import_bookmarks_dialog_title">Bladwijzers importeren?</string>
   <string name="export_all_bookmarks_dialog_title">Alle bladwijzers exporteren?</string>
-  <string name="export_all_bookmarks_dialog_message">Door het exporteren wordt in de map Download/org.kiwix…/ een bestand bookmark.xml aangemaakt.</string>
+  <string name="export_all_bookmarks_dialog_message">Door het exporteren wordt in de map \n%s een bestand bookmark.xml aangemaakt.</string>
   <string name="bookmark_imported_message">Alle bladwijzers zijn geïmporteerd.</string>
   <string name="error_invalid_bookmark_file">Fout: het geselecteerde bestand is geen geldig bladwijzerbestand.</string>
   <string name="send_report">Diagnostisch rapport verzenden</string>

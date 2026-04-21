@@ -21,6 +21,7 @@ package org.kiwix.kiwixmobile.reader
 import android.os.Build
 import android.os.Bundle
 import android.os.Message
+import android.provider.MediaStore
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
@@ -58,7 +59,6 @@ import org.kiwix.kiwixmobile.core.main.reader.CoreReaderFragment
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
-import org.kiwix.kiwixmobile.core.utils.files.FileUtils
 import org.kiwix.kiwixmobile.main.KiwixMainActivity
 import org.kiwix.kiwixmobile.main.topLevel
 import org.kiwix.kiwixmobile.page.bookmarks.bookmarks
@@ -67,6 +67,7 @@ import org.kiwix.kiwixmobile.testutils.TestUtils
 import org.kiwix.kiwixmobile.testutils.TestUtils.closeSystemDialogs
 import org.kiwix.kiwixmobile.testutils.TestUtils.getOkkHttpClientForTesting
 import org.kiwix.kiwixmobile.testutils.TestUtils.isSystemUINotRespondingDialogVisible
+import org.kiwix.kiwixmobile.testutils.TestUtils.testFlakyView
 import org.kiwix.kiwixmobile.ui.KiwixDestination
 import java.io.File
 import java.io.FileOutputStream
@@ -209,20 +210,23 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
       kiwixMainActivity.navigate(KiwixDestination.Library.route)
     }
     composeTestRule.waitForIdle()
-    val downloadingZimFile = getDownloadingZimFile()
-    getOkkHttpClientForTesting().newCall(downloadRequest()).execute().use { response ->
-      if (response.isSuccessful) {
-        response.body?.let { responseBody ->
-          writeZimFileData(responseBody, downloadingZimFile)
+    var downloadingZimFile: File? = null
+    testFlakyView({
+      downloadingZimFile = getDownloadingZimFile()
+      getOkkHttpClientForTesting().newCall(downloadRequest()).execute().use { response ->
+        if (response.isSuccessful) {
+          response.body?.let { responseBody ->
+            writeZimFileData(responseBody, downloadingZimFile)
+          }
+        } else {
+          throw RuntimeException(
+            "Download Failed. Error: ${response.message}\n" +
+              " Status Code: ${response.code}"
+          )
         }
-      } else {
-        throw RuntimeException(
-          "Download Failed. Error: ${response.message}\n" +
-            " Status Code: ${response.code}"
-        )
       }
-    }
-    openKiwixReaderFragmentWithFile(downloadingZimFile)
+    })
+    openKiwixReaderFragmentWithFile(downloadingZimFile!!)
     composeTestRule.waitForIdle()
     reader {
       checkZimFileLoadedSuccessful(composeTestRule)
@@ -287,21 +291,24 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
         kiwixMainActivity.navigate(KiwixDestination.Library.route)
       }
       composeTestRule.waitForIdle()
-      val downloadingZimFile = getDownloadingZimFile()
-      getOkkHttpClientForTesting().newCall(downloadRequest(rayCharlesZimFileUrl)).execute()
-        .use { response ->
-          if (response.isSuccessful) {
-            response.body?.let { responseBody ->
-              writeZimFileData(responseBody, downloadingZimFile)
+      var downloadingZimFile: File? = null
+      testFlakyView({
+        downloadingZimFile = getDownloadingZimFile()
+        getOkkHttpClientForTesting().newCall(downloadRequest(rayCharlesZimFileUrl)).execute()
+          .use { response ->
+            if (response.isSuccessful) {
+              response.body?.let { responseBody ->
+                writeZimFileData(responseBody, downloadingZimFile)
+              }
+            } else {
+              throw RuntimeException(
+                "Download Failed. Error: ${response.message}\n" +
+                  " Status Code: ${response.code}"
+              )
             }
-          } else {
-            throw RuntimeException(
-              "Download Failed. Error: ${response.message}\n" +
-                " Status Code: ${response.code}"
-            )
           }
-        }
-      openKiwixReaderFragmentWithFile(downloadingZimFile)
+      })
+      openKiwixReaderFragmentWithFile(downloadingZimFile!!)
       composeTestRule.waitForIdle()
       reader {
         startReadAloudFeature(composeTestRule)
@@ -348,8 +355,7 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
       }
     }
     val saveHandler = KiwixWebView.SaveHandler(
-      kiwixWebView.zimReaderContainer,
-      kiwixWebView.kiwixDataStore
+      kiwixWebView.zimReaderContainer
     )
 
     // Must run on main thread because Handler uses MainLooper
@@ -365,11 +371,30 @@ class KiwixReaderFragmentTest : BaseActivityTest() {
   }
 
   private suspend fun waitForDownloadedImageFile(kiwixDataStore: KiwixDataStore): File {
-    val dir = FileUtils.getDownloadRootDir(kiwixDataStore)
-
     repeat(20) {
-      dir?.listFiles()?.firstOrNull { it.name.startsWith("image_") }?.let {
-        return it
+      val projection = arrayOf(
+        MediaStore.Images.Media.DATA
+      )
+
+      val selection = "${MediaStore.Images.Media.RELATIVE_PATH}=?"
+      val selectionArgs = arrayOf("Pictures/Kiwix/")
+
+      val cursor = context.contentResolver.query(
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        projection,
+        selection,
+        selectionArgs,
+        null
+      )
+
+      cursor?.use {
+        if (it.moveToFirst()) {
+          val index = it.getColumnIndex(MediaStore.Images.Media.DATA)
+          if (index != -1) {
+            val path = it.getString(index)
+            return@waitForDownloadedImageFile File(path)
+          }
+        }
       }
       Thread.sleep(500)
     }
