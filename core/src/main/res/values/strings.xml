@@ -9,6 +9,9 @@
   <string name="menu_read_aloud">Read aloud</string>
   <string name="menu_read_aloud_stop">Stop reading aloud</string>
   <string name="menu_support_kiwix">Support Kiwix</string>
+  <string name="menu_highlight">Highlight</string>
+  <string name="highlight_added">Highlight added</string>
+  <string name="highlight_removed">Highlight removed</string>
   <string name="menu_support_kiwix_for_custom_apps">Support %s</string>
   <string name="menu_about_app">About %s app</string>
   <string name="external_redirect_message">You will now be redirected to our %s.</string>

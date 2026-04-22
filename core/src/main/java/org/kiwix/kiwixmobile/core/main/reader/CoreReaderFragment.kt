@@ -40,6 +40,7 @@ import android.os.CountDownTimer
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import kotlinx.coroutines.delay
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.ActionMode
@@ -50,6 +51,11 @@ import android.view.ViewGroup
 import android.webkit.WebBackForwardList
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.view.Gravity
+import android.graphics.drawable.GradientDrawable
+import android.graphics.Color
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -91,6 +97,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import androidx.core.graphics.toColorInt
 import org.kiwix.kiwixmobile.core.BuildConfig
 import org.kiwix.kiwixmobile.core.R
 import org.kiwix.kiwixmobile.core.R.string
@@ -98,6 +105,7 @@ import org.kiwix.kiwixmobile.core.StorageObserver
 import org.kiwix.kiwixmobile.core.ThemeConfig
 import org.kiwix.kiwixmobile.core.base.BaseFragment
 import org.kiwix.kiwixmobile.core.base.FragmentActivityExtensions
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import org.kiwix.kiwixmobile.core.dao.LibkiwixBookmarks
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
 import org.kiwix.kiwixmobile.core.extensions.ActivityExtensions.consumeObservable
@@ -253,6 +261,7 @@ abstract class CoreReaderFragment :
   private var isBackToTopEnabled = false
   private var isOpenNewTabInBackground = false
   private var documentParserJs: String? = null
+  private var highlightJs: String? = null
   private var documentParser: DocumentParser? = null
   private var tts: KiwixTextToSpeech? = null
   private var compatCallback: CompatFindActionModeCallback? = null
@@ -402,6 +411,41 @@ abstract class CoreReaderFragment :
       // Inflate custom menu icon.
       activity?.menuInflater?.inflate(R.menu.menu_webview_action, menu)
       configureWebViewSelectionHandler(menu)
+      val highlightItem = menu?.add(0, R.id.menu_highlight, 0, string.menu_highlight)?.apply {
+        setIcon(R.drawable.ic_bookmark_border_24dp)
+        setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        setOnMenuItemClickListener {
+          getCurrentWebView()?.evaluateJavascript("HighlightEngine.saveSelection();") {
+            showHighlightColorPicker()
+            actionMode?.finish()
+          }
+          true
+        }
+      }
+
+      val unhighlightItem = menu?.add(0, R.id.menu_unhighlight, 0, "Unhighlight")?.apply {
+        setIcon(R.drawable.ic_bookmark_24dp)
+        setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM)
+        isVisible = false
+        setOnMenuItemClickListener {
+          getCurrentWebView()?.evaluateJavascript("HighlightEngine.removeHighlight();", null)
+          actionMode?.finish()
+          true
+        }
+      }
+
+      getCurrentWebView()?.evaluateJavascript("typeof HighlightEngine !== 'undefined'") { result ->
+        if (result == "true") {
+          getCurrentWebView()?.evaluateJavascript("HighlightEngine.isSelectionHighlighted();") { isHighlightedResult ->
+            val isHighlighted = isHighlightedResult == "true"
+            highlightItem?.isVisible = !isHighlighted
+            unhighlightItem?.isVisible = isHighlighted
+          }
+        } else {
+          // Engine not loaded, try to re-inject
+          updateTableOfContents()
+        }
+      }
     }
     return FragmentActivityExtensions.Super.ShouldCall
   }
@@ -712,6 +756,7 @@ abstract class CoreReaderFragment :
 
   private fun addFileReader() {
     documentParserJs = requireActivity().readFile("js/documentParser.js")
+    highlightJs = requireActivity().readFile("js/highlight.js")
     documentSections?.clear()
   }
 
@@ -1164,7 +1209,19 @@ abstract class CoreReaderFragment :
   }
 
   private fun updateTableOfContents() {
-    loadUrlWithCurrentWebview("javascript:($documentParserJs)()")
+    if (documentParserJs.isNullOrEmpty()) {
+      documentParserJs = requireActivity().readFile("js/documentParser.js")
+    }
+    if (highlightJs.isNullOrEmpty()) {
+      highlightJs = requireActivity().readFile("js/highlight.js")
+    }
+
+    getCurrentWebView()?.let { webView ->
+      webView.evaluateJavascript("($documentParserJs)();", null)
+      webView.evaluateJavascript("($highlightJs)();") {
+        applyHighlights()
+      }
+    }
   }
 
   protected fun loadUrlWithCurrentWebview(url: String?) {
@@ -2391,6 +2448,118 @@ abstract class CoreReaderFragment :
       if (!isWebViewHistoryRestoring) {
         saveTabStates()
       }
+    }
+  }
+
+  private fun applyHighlights() {
+    lifecycleScope.launch {
+      var zimFileReader = zimReaderContainer?.zimFileReader
+      var count = 0
+      while (zimFileReader == null && count < 30) {
+        delay(200)
+        zimFileReader = zimReaderContainer?.zimFileReader
+        count++
+      }
+
+      val zimId = zimFileReader?.id ?: return@launch
+      val rawUrl = getCurrentWebView()?.url ?: return@launch
+      val url = getHighlightUrl(rawUrl)
+
+      val highlights = repositoryActions?.getHighlights(zimId, url)?.first() ?: return@launch
+
+      highlights.forEach { highlight ->
+        val escapedRangeJson = highlight.rangeJSON.replace("'", "\\'")
+        val colorHex = String.format("#%06X", 0xFFFFFF and highlight.color)
+        getCurrentWebView()?.evaluateJavascript("HighlightEngine.restoreHighlight('$escapedRangeJson', '$colorHex');", null)
+      }
+    }
+  }
+
+  override fun onHighlightCreated(highlightText: String, rangeJSON: String, color: String) {
+    val zimId = zimReaderContainer?.zimFileReader?.id ?: return
+    val rawUrl = getCurrentWebView()?.url ?: return
+    val url = getHighlightUrl(rawUrl)
+
+    val highlight = HighlightRoomEntity(
+      zimId = zimId,
+      url = url,
+      highlightText = highlightText,
+      rangeJSON = rangeJSON,
+      color = color.toColorInt()
+    )
+    // Use NonCancellable to ensure saving completes even if fragment is destroyed
+    lifecycleScope.launch(kotlinx.coroutines.NonCancellable) {
+      repositoryActions?.saveHighlight(highlight)
+      withContext(Dispatchers.Main) {
+        toast(string.highlight_added)
+      }
+    }
+  }
+
+  override fun onHighlightDeleted(rangeJSON: String) {
+    val zimId = zimReaderContainer?.zimFileReader?.id ?: return
+    val rawUrl = getCurrentWebView()?.url ?: return
+    val url = getHighlightUrl(rawUrl)
+    lifecycleScope.launch(kotlinx.coroutines.NonCancellable) {
+      repositoryActions?.deleteHighlightByRange(zimId, url, rangeJSON)
+    }
+  }
+
+  private fun getHighlightUrl(url: String): String {
+    // Extract the relative path within the ZIM to ensure URL stability across sessions
+    return url.substringAfter("://").substringAfter("/").substringBefore("#").substringBefore("?")
+  }
+
+  private fun showHighlightColorPicker() {
+    val colors = listOf(
+      "#FFD54F", // Yellow
+      "#AED581", // Green
+      "#F48FB1", // Pink
+      "#81D4FA", // Blue
+      "#B39DDB" // Purple
+    )
+
+    val context = requireContext()
+    val dialog = BottomSheetDialog(context)
+    val padding = (16 * context.resources.displayMetrics.density).toInt()
+    val container = LinearLayout(context).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER
+      setPadding(padding, padding, padding, padding)
+    }
+
+    colors.forEach { colorStr ->
+      val colorView = View(context).apply {
+        val size = (48 * context.resources.displayMetrics.density).toInt()
+        layoutParams = LinearLayout.LayoutParams(size, size).apply {
+          setMargins(padding / 2, 0, padding / 2, 0)
+        }
+        background = GradientDrawable().apply {
+          shape = GradientDrawable.OVAL
+          setColor(colorStr.toColorInt())
+          setStroke(2, Color.WHITE)
+        }
+        setOnClickListener {
+          requireContext().toast("Applying highlight...")
+          getCurrentWebView()?.evaluateJavascript(
+            "HighlightEngine.createHighlight('$colorStr');",
+            null
+          )
+          dialog.dismiss()
+        }
+      }
+      container.addView(colorView)
+    }
+
+    dialog.setContentView(container)
+    dialog.show()
+  }
+
+  private fun String.decodeUrl(): String {
+    return try {
+      java.net.URLDecoder.decode(this, "UTF-8")
+    } catch (e: Exception) {
+      this
     }
   }
 

@@ -19,6 +19,7 @@ package org.kiwix.kiwixmobile.core.data
 
 import kotlinx.coroutines.flow.Flow
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import org.kiwix.kiwixmobile.core.page.bookmark.models.LibkiwixBookmarkItem
 import org.kiwix.kiwixmobile.core.page.history.models.HistoryListItem
 import org.kiwix.kiwixmobile.core.page.history.models.HistoryListItem.HistoryItem
@@ -48,4 +49,8 @@ interface DataSource {
   suspend fun insertWebViewPageHistoryItems(webViewHistoryEntityList: List<WebViewHistoryEntity>)
   fun getAllWebViewPagesHistory(): Flow<List<WebViewHistoryEntity>>
   suspend fun clearWebViewPagesHistory()
+  suspend fun saveHighlight(highlight: HighlightRoomEntity)
+  fun getHighlights(zimId: String, url: String): Flow<List<HighlightRoomEntity>>
+  suspend fun deleteHighlight(id: Long)
+  suspend fun deleteHighlightByRange(zimId: String, url: String, rangeJSON: String)
 }

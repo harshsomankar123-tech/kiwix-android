@@ -57,4 +57,8 @@ open class DatabaseModule {
     db.downloadRoomDao().also {
       it.libkiwixBookOnDisk = libkiwixBookOnDisk
     }
+
+  @Singleton
+  @Provides
+  fun provideHighlightRoomDao(db: KiwixRoomDatabase) = db.highlightRoomDao()
 }

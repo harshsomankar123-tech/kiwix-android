@@ -30,6 +30,8 @@ import org.kiwix.kiwixmobile.core.dao.LibkiwixBookmarks
 import org.kiwix.kiwixmobile.core.dao.NotesRoomDao
 import org.kiwix.kiwixmobile.core.dao.RecentSearchRoomDao
 import org.kiwix.kiwixmobile.core.dao.WebViewHistoryRoomDao
+import org.kiwix.kiwixmobile.core.dao.HighlightRoomDao
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
 import org.kiwix.kiwixmobile.core.extensions.HeaderizableList
 import org.kiwix.kiwixmobile.core.page.bookmark.models.LibkiwixBookmarkItem
@@ -56,6 +58,7 @@ class Repository @Inject internal constructor(
   private val webViewHistoryRoomDao: WebViewHistoryRoomDao,
   private val notesRoomDao: NotesRoomDao,
   private val recentSearchRoomDao: RecentSearchRoomDao,
+  private val highlightRoomDao: HighlightRoomDao,
   private val zimReaderContainer: ZimReaderContainer
 ) : DataSource {
   override fun getLanguageCategorizedBooks() =
@@ -158,5 +161,24 @@ class Repository @Inject internal constructor(
   @Suppress("InjectDispatcher")
   override suspend fun deleteNote(noteTitle: String) = withContext(Dispatchers.IO) {
     notesRoomDao.deleteNote(noteTitle)
+  }
+
+  @Suppress("InjectDispatcher")
+  override suspend fun saveHighlight(highlight: HighlightRoomEntity) = withContext(Dispatchers.IO) {
+    highlightRoomDao.saveHighlight(highlight)
+    Unit
+  }
+
+  override fun getHighlights(zimId: String, url: String) =
+    highlightRoomDao.getHighlights(zimId, url)
+
+  @Suppress("InjectDispatcher")
+  override suspend fun deleteHighlight(id: Long) = withContext(Dispatchers.IO) {
+    highlightRoomDao.deleteHighlight(id)
+  }
+
+  @Suppress("InjectDispatcher")
+  override suspend fun deleteHighlightByRange(zimId: String, url: String, rangeJSON: String) = withContext(Dispatchers.IO) {
+    highlightRoomDao.deleteHighlightByRange(zimId, url, rangeJSON)
   }
 }

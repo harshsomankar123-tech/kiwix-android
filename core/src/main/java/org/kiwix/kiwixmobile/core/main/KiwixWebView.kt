@@ -99,6 +99,7 @@ open class KiwixWebView constructor(
     }
     setInitialScale(INITIAL_SCALE)
     clearCache(true)
+    addJavascriptInterface(HighlightInterface(), "HighlightInterface")
     webViewClient = coreWebViewClient
     webChromeClient =
       KiwixWebChromeClient(callback, videoView, this).apply {
@@ -219,6 +220,22 @@ open class KiwixWebView constructor(
             }
           }
         }
+      }
+    }
+  }
+
+  inner class HighlightInterface {
+    @android.webkit.JavascriptInterface
+    fun onHighlightCreated(highlightText: String, rangeJSON: String, color: String) {
+      Handler(Looper.getMainLooper()).post {
+        callback.onHighlightCreated(highlightText, rangeJSON, color)
+      }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onHighlightDeleted(rangeJSON: String) {
+      Handler(Looper.getMainLooper()).post {
+        callback.onHighlightDeleted(rangeJSON)
       }
     }
   }

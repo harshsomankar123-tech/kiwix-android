@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import org.kiwix.kiwixmobile.core.data.DataSource
 import org.kiwix.kiwixmobile.core.di.ActivityScope
 import org.kiwix.kiwixmobile.core.page.bookmark.models.LibkiwixBookmarkItem
@@ -104,4 +105,15 @@ class MainRepositoryActions @Inject constructor(private val dataSource: DataSour
     dataSource.getAllWebViewPagesHistory()
       .first()
       .map(::WebViewHistoryItem)
+
+  suspend fun saveHighlight(highlight: HighlightRoomEntity) {
+    dataSource.saveHighlight(highlight)
+  }
+
+  fun getHighlights(zimId: String, url: String) =
+    dataSource.getHighlights(zimId, url)
+
+  suspend fun deleteHighlightByRange(zimId: String, url: String, rangeJSON: String) {
+    dataSource.deleteHighlightByRange(zimId, url, rangeJSON)
+  }
 }

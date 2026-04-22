@@ -31,4 +31,6 @@ interface WebViewCallback {
   fun webViewPageChanged(page: Int, maxPages: Int)
   fun webViewLongClick(url: String)
   fun onFullscreenVideoToggled(isFullScreen: Boolean)
+  fun onHighlightCreated(highlightText: String, rangeJSON: String, color: String)
+  fun onHighlightDeleted(rangeJSON: String)
 }

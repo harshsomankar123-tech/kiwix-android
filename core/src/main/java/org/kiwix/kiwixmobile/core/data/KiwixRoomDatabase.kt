@@ -40,6 +40,8 @@ import org.kiwix.kiwixmobile.core.dao.entities.PauseReasonConverter
 import org.kiwix.kiwixmobile.core.dao.entities.RecentSearchRoomEntity
 import org.kiwix.kiwixmobile.core.dao.entities.StatusConverter
 import org.kiwix.kiwixmobile.core.dao.entities.WebViewHistoryEntity
+import org.kiwix.kiwixmobile.core.dao.HighlightRoomDao
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import org.kiwix.kiwixmobile.core.dao.entities.ZimSourceRoomConverter
 
 @Suppress("UnnecessaryAbstractClass")
@@ -49,9 +51,10 @@ import org.kiwix.kiwixmobile.core.dao.entities.ZimSourceRoomConverter
     HistoryRoomEntity::class,
     NotesRoomEntity::class,
     DownloadRoomEntity::class,
-    WebViewHistoryEntity::class
+    WebViewHistoryEntity::class,
+    HighlightRoomEntity::class
   ],
-  version = 10,
+  version = 11,
   exportSchema = false
 )
 @TypeConverters(
@@ -68,6 +71,7 @@ abstract class KiwixRoomDatabase : RoomDatabase() {
   abstract fun notesRoomDao(): NotesRoomDao
   abstract fun downloadRoomDao(): DownloadRoomDao
   abstract fun webViewHistoryRoomDao(): WebViewHistoryRoomDao
+  abstract fun highlightRoomDao(): HighlightRoomDao
 
   companion object {
     private var db: KiwixRoomDatabase? = null
@@ -86,7 +90,8 @@ abstract class KiwixRoomDatabase : RoomDatabase() {
               MIGRATION_6_7,
               MIGRATION_7_8,
               MIGRATION_8_9,
-              MIGRATION_9_10
+              MIGRATION_9_10,
+              MIGRATION_10_11
             )
             .build().also { db = it }
       }
@@ -373,6 +378,26 @@ abstract class KiwixRoomDatabase : RoomDatabase() {
         override fun migrate(db: SupportSQLiteDatabase) {
           db.execSQL(
             "ALTER TABLE DownloadRoomEntity ADD COLUMN pauseReason INTEGER NOT NULL DEFAULT 0"
+          )
+        }
+      }
+
+    @Suppress("MagicNumber")
+    private val MIGRATION_10_11 =
+      object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+          db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `HighlightRoomEntity` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `zimId` TEXT NOT NULL,
+                `url` TEXT NOT NULL,
+                `highlightText` TEXT NOT NULL,
+                `rangeJSON` TEXT NOT NULL,
+                `color` INTEGER NOT NULL,
+                `timeStamp` INTEGER NOT NULL
+            )
+            """
           )
         }
       }

@@ -32,6 +32,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.kiwix.kiwixmobile.core.dao.HistoryRoomDao
+import org.kiwix.kiwixmobile.core.dao.HighlightRoomDao
 import org.kiwix.kiwixmobile.core.dao.NotesRoomDao
 import org.kiwix.kiwixmobile.core.dao.RecentSearchRoomDao
 import org.kiwix.kiwixmobile.core.dao.entities.RecentSearchRoomEntity
@@ -39,6 +40,7 @@ import org.kiwix.kiwixmobile.core.data.KiwixRoomDatabase
 import org.kiwix.kiwixmobile.core.page.history.models.HistoryListItem
 import org.kiwix.kiwixmobile.core.page.notes.models.NoteListItem
 import org.kiwix.kiwixmobile.core.reader.ZimReaderSource
+import org.kiwix.kiwixmobile.core.dao.entities.HighlightRoomEntity
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
@@ -47,6 +49,7 @@ class KiwixRoomDatabaseTest {
   private lateinit var db: KiwixRoomDatabase
   private lateinit var historyRoomDao: HistoryRoomDao
   private lateinit var notesRoomDao: NotesRoomDao
+  private lateinit var highlightRoomDao: HighlightRoomDao
 
   @Before
   fun setUpDatabase() {
@@ -184,6 +187,36 @@ class KiwixRoomDatabaseTest {
       notesRoomDao.deletePages(notesRoomDao.notes().first())
       notesList = notesRoomDao.notes().first() as List<NoteListItem>
       assertEquals(notesList.size, 0)
+    }
+
+  @Test
+  fun testHighlightRoomDao() =
+    runBlocking {
+      highlightRoomDao = db.highlightRoomDao()
+      val highlight = HighlightRoomEntity(
+        zimId = "test-zim-id",
+        url = "http://kiwix.app/MainPage",
+        highlightText = "Sample highlighted text",
+        rangeJSON = "{\"startOffset\":0, \"endOffset\":10}",
+        color = 0xFFFF00
+      )
+
+      // Save and retrieve a highlight
+      val id = highlightRoomDao.saveHighlight(highlight)
+      var highlights = highlightRoomDao.getHighlights("test-zim-id", "http://kiwix.app/MainPage").first()
+      assertEquals(1, highlights.size)
+      with(highlights.first()) {
+        assertThat(zimId, equalTo(highlight.zimId))
+        assertThat(url, equalTo(highlight.url))
+        assertThat(highlightText, equalTo(highlight.highlightText))
+        assertThat(rangeJSON, equalTo(highlight.rangeJSON))
+        assertThat(color, equalTo(highlight.color))
+      }
+
+      // Test delete
+      highlightRoomDao.deleteHighlight(id)
+      highlights = highlightRoomDao.getHighlights("test-zim-id", "http://kiwix.app/MainPage").first()
+      assertEquals(0, highlights.size)
     }
 
   companion object {
