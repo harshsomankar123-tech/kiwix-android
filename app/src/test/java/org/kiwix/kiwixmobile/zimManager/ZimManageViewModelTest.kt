@@ -148,6 +148,7 @@ class ZimManageViewModelTest {
     viewModel.onClearedExposed()
   }
 
+  @Suppress("LongMethod")
   @BeforeEach
   fun init() {
     clearAllMocks()
@@ -416,6 +417,7 @@ class ZimManageViewModelTest {
     }
   }
 
+  @Suppress("LongMethod")
   @Disabled("We will refactor this in migration PR")
   @Test
   fun `library marks files over 4GB as can't download if file system state says to`() = flakyTest {
