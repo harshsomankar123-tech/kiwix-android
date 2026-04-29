@@ -79,6 +79,7 @@ import org.kiwix.kiwixmobile.core.utils.dialog.RateDialogHandler
 import javax.inject.Inject
 import kotlin.system.exitProcess
 import androidx.core.graphics.createBitmap
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 const val KIWIX_SUPPORT_URL = "https://www.kiwix.org/support"
 const val PAGE_URL_KEY = "pageUrl"
@@ -167,7 +168,7 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
   val enableLeftDrawer = mutableStateOf(true)
 
   /**
-   * For managing the back press of fragments.
+   * For managing the back press of compose screens.
    */
   val customBackHandler = mutableStateOf<(() -> FragmentActivityExtensions.Super)?>(null)
 
@@ -176,6 +177,8 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
    */
   @OptIn(ExperimentalMaterial3Api::class)
   var bottomAppBarScrollBehaviour: BottomAppBarScrollBehavior? = null
+
+  var activityResultForwarder: ((Int, Int, Intent?) -> Unit)? = null
   abstract val bookmarksFragmentRoute: String
   abstract val settingsFragmentRoute: String
   abstract val historyFragmentRoute: String
@@ -198,6 +201,10 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
 
   @Suppress("InjectDispatcher")
   override fun onCreate(savedInstanceState: Bundle?) {
+    val splashScreen = installSplashScreen()
+    splashScreen.setKeepOnScreenCondition {
+      !CoreApp.instance.themeConfig.isThemeLoaded.value
+    }
     setTheme(R.style.KiwixTheme)
     super.onCreate(savedInstanceState)
     if (!BuildConfig.DEBUG) {
@@ -264,6 +271,7 @@ abstract class CoreMainActivity : BaseActivity(), WebViewProvider {
   @Suppress("DEPRECATION")
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
     super.onActivityResult(requestCode, resultCode, data)
+    activityResultForwarder?.invoke(requestCode, resultCode, data)
     activeFragments().iterator().forEach { it.onActivityResult(requestCode, resultCode, data) }
   }
 
