@@ -27,7 +27,6 @@ import org.kiwix.kiwixmobile.core.page.bookmark.viewmodel.effects.ShowDeleteBook
 import org.kiwix.kiwixmobile.core.page.history.viewmodel.effects.ShowDeleteHistoryDialog
 import org.kiwix.kiwixmobile.core.page.notes.viewmodel.effects.ShowDeleteNotesDialog
 import org.kiwix.kiwixmobile.core.page.notes.viewmodel.effects.ShowOpenNoteDialog
-import org.kiwix.kiwixmobile.core.search.SearchFragment
 import org.kiwix.kiwixmobile.core.search.viewmodel.effects.ShowDeleteSearchDialog
 
 @ActivityScope
@@ -35,7 +34,6 @@ import org.kiwix.kiwixmobile.core.search.viewmodel.effects.ShowDeleteSearchDialo
   modules = [ActivityModule::class]
 )
 interface CoreActivityComponent {
-  fun inject(searchFragment: SearchFragment)
   fun inject(showDeleteSearchDialog: ShowDeleteSearchDialog)
   fun inject(showDeleteBookmarksDialog: ShowDeleteBookmarksDialog)
   fun inject(showDeleteHistoryDialog: ShowDeleteHistoryDialog)
