@@ -24,7 +24,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -69,7 +68,6 @@ import org.kiwix.kiwixmobile.core.page.history.HistoryScreenRoute
 import org.kiwix.kiwixmobile.core.page.history.viewmodel.HistoryViewModel
 import org.kiwix.kiwixmobile.core.page.notes.NotesScreenRoute
 import org.kiwix.kiwixmobile.core.page.notes.viewmodel.NotesViewModel
-import org.kiwix.kiwixmobile.core.reader.integrity.ValidateZimViewModel
 import org.kiwix.kiwixmobile.core.search.NAV_ARG_SEARCH_STRING
 import org.kiwix.kiwixmobile.core.search.SearchScreenRoute
 import org.kiwix.kiwixmobile.core.settings.SettingsScreenRoute
@@ -82,9 +80,7 @@ import org.kiwix.kiwixmobile.language.LanguageScreenRoute
 import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferScreenRoute
 import org.kiwix.kiwixmobile.localFileTransfer.LocalFileTransferViewModel
 import org.kiwix.kiwixmobile.localFileTransfer.URIS_KEY
-import org.kiwix.kiwixmobile.main.KiwixMainActivity
-import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryRoute
-import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryViewModel
+import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryFragment
 import org.kiwix.kiwixmobile.nav.destination.library.online.OnlineLibraryFragment
 import org.kiwix.kiwixmobile.nav.destination.reader.KiwixReaderFragment
 import org.kiwix.kiwixmobile.settings.KiwixSettingsViewModel
@@ -97,8 +93,7 @@ fun KiwixNavGraph(
   startDestination: String,
   modifier: Modifier = Modifier,
   viewModelFactory: ViewModelProvider.Factory,
-  alertDialogShower: AlertDialogShower,
-  snackBarHostState: SnackbarHostState
+  alertDialogShower: AlertDialogShower
 ) {
   NavHost(
     navController = navController,
@@ -119,28 +114,15 @@ fun KiwixNavGraph(
         }
       )
     ) { backStackEntry ->
-      val context = LocalContext.current
-      val activity = context as KiwixMainActivity
-      val validateZimViewModel: ValidateZimViewModel = viewModel(factory = viewModelFactory)
-      val localLibraryViewModel: LocalLibraryViewModel = viewModel(factory = viewModelFactory)
-      LaunchedEffect(Unit) {
-        localLibraryViewModel.apply {
-          initialize(
-            validateZimViewModel,
-            alertDialogShower,
-            snackBarHostState,
-            activity.supportFragmentManager
-          )
-        }
-      }
       val zimFileUri = backStackEntry.arguments?.getString(ZIM_FILE_URI_KEY).orEmpty()
 
-      LocalLibraryRoute(
-        localLibraryViewModel = localLibraryViewModel,
-        navController = navController,
-        zimFileUriArg = zimFileUri,
-        snackBarHostState = snackBarHostState
-      )
+      FragmentContainer(R.id.localLibraryFragmentContainer) {
+        LocalLibraryFragment().apply {
+          arguments = Bundle().apply {
+            putString(ZIM_FILE_URI_KEY, zimFileUri)
+          }
+        }
+      }
     }
     composable(KiwixDestination.Downloads.route) {
       FragmentContainer(R.id.downloadFragmentContainer) {
@@ -228,7 +210,6 @@ fun KiwixNavGraph(
         }
       )
     ) { backStackEntry ->
-
       val context = LocalActivity.current
       val coreMainActivity = context as CoreMainActivity
 
