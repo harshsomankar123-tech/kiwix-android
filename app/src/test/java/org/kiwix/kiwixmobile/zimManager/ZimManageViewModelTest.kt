@@ -687,7 +687,7 @@ class ZimManageViewModelTest {
         testFlow(
           flow = viewModel.sideEffects,
           triggerAction = { viewModel.fileSelectActions.emit(RestartActionMode) },
-          assert = { assertThat(awaitItem()).isEqualTo(StartMultiSelection(viewModel.fileSelectActions)) }
+          assert = { assert(awaitItem() == StartMultiSelection(viewModel.fileSelectActions)) }
         )
       }
     }
@@ -698,7 +698,7 @@ class ZimManageViewModelTest {
         testFlow(
           flow = viewModel.sideEffects,
           triggerAction = { viewModel.fileSelectActions.emit(UserClickedDownloadBooksButton) },
-          assert = { assertThat(awaitItem()).isEqualTo(NavigateToDownloads) }
+          assert = { assert(awaitItem() == NavigateToDownloads) }
         )
       }
     }
