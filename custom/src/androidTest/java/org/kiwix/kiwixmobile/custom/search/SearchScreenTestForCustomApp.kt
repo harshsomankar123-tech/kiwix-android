@@ -125,7 +125,10 @@ class SearchScreenTestForCustomApp {
   }
 
   @Test
-  fun searchFragment() {
+  fun searchScreen() {
+    activityScenario.onActivity {
+      customMainActivity = it
+    }
     testFlakyView({
       // test with a large ZIM file to properly test the scenario
       downloadingZimFile = getDownloadingZimFileFromDataFolder()
