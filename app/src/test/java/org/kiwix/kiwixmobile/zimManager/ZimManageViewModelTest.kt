@@ -23,15 +23,12 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkCapabilities.TRANSPORT_WIFI
 import android.os.Build
-import androidx.lifecycle.asFlow
-import androidx.lifecycle.viewModelScope
 import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.TurbineTestContext
 import app.cash.turbine.test
 import com.jraska.livedata.test
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -53,50 +50,25 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.RegisterExtension
-import org.kiwix.kiwixmobile.core.StorageObserver
 import org.kiwix.kiwixmobile.core.dao.DownloadRoomDao
 import org.kiwix.kiwixmobile.core.dao.LibkiwixBookOnDisk
-import org.kiwix.kiwixmobile.core.data.DataSource
 import org.kiwix.kiwixmobile.core.data.remote.KiwixService
 import org.kiwix.kiwixmobile.core.downloader.model.DownloadModel
-import org.kiwix.kiwixmobile.core.reader.integrity.ValidateZimViewModel
 import org.kiwix.kiwixmobile.core.ui.components.ONE
 import org.kiwix.kiwixmobile.core.utils.ZERO
 import org.kiwix.kiwixmobile.core.utils.datastore.KiwixDataStore
-import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
-import org.kiwix.kiwixmobile.core.utils.files.ScanningProgressListener
 import org.kiwix.kiwixmobile.core.zim_manager.ConnectivityBroadcastReceiver
 import org.kiwix.kiwixmobile.core.zim_manager.NetworkState
 import org.kiwix.kiwixmobile.core.zim_manager.NetworkState.CONNECTED
 import org.kiwix.kiwixmobile.core.zim_manager.NetworkState.NOT_CONNECTED
-import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.BooksOnDiskListItem
 import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.BooksOnDiskListItem.BookOnDisk
-import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.SelectionMode.MULTI
-import org.kiwix.kiwixmobile.core.zim_manager.fileselect_view.SelectionMode.NORMAL
 import org.kiwix.kiwixmobile.language.viewmodel.flakyTest
 import org.kiwix.sharedFunctions.MainDispatcherRule
 import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState
 import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState.CanWrite4GbFile
 import org.kiwix.kiwixmobile.zimManager.Fat32Checker.FileSystemState.CannotWrite4GbFile
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.MultiModeFinished
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestDeleteMultiSelection
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestMultiSelection
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestNavigateTo
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestSelect
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestShareMultiSelection
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RequestValidateZimFiles
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.RestartActionMode
-import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.FileSelectActions.UserClickedDownloadBooksButton
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.OnlineLibraryRequest
 import org.kiwix.kiwixmobile.zimManager.ZimManageViewModel.OnlineLibraryResult
-import org.kiwix.kiwixmobile.zimManager.fileselectView.FileSelectListState
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.DeleteFiles
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.NavigateToDownloads
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.None
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.OpenFileWithNavigation
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.ShareFiles
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.StartMultiSelection
-import org.kiwix.kiwixmobile.zimManager.fileselectView.effects.ValidateZIMFiles
 import org.kiwix.kiwixmobile.zimManager.libraryView.LibraryListItem
 import org.kiwix.libkiwix.Book
 import org.kiwix.sharedFunctions.InstantExecutorExtension
@@ -106,23 +78,17 @@ import org.kiwix.sharedFunctions.downloadModel
 import org.kiwix.sharedFunctions.libkiwixBook
 import java.util.Locale
 import kotlin.time.Duration
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @ExtendWith(InstantExecutorExtension::class)
 class ZimManageViewModelTest {
   private val downloadRoomDao: DownloadRoomDao = mockk()
   private val libkiwixBookOnDisk: LibkiwixBookOnDisk = mockk()
-  private val storageObserver: StorageObserver = mockk()
   private val kiwixService: KiwixService = mockk()
   private val application: Application = mockk(relaxed = true)
   private val connectivityBroadcastReceiver: ConnectivityBroadcastReceiver = mockk(relaxed = true)
   private val fat32Checker: Fat32Checker = mockk()
-  private val dataSource: DataSource = mockk()
   private val connectivityManager: ConnectivityManager = mockk()
-  private val alertDialogShower: AlertDialogShower = mockk()
-  private val validateZimViewModel: ValidateZimViewModel = mockk()
 
   @Suppress("DEPRECATION")
   private val networkCapabilities: NetworkCapabilities = mockk()
@@ -130,14 +96,12 @@ class ZimManageViewModelTest {
   lateinit var viewModel: ZimManageViewModel
 
   private val downloads = MutableStateFlow<List<DownloadModel>>(emptyList())
-  private val booksOnFileSystem = MutableStateFlow<List<Book>>(emptyList())
   private val books = MutableStateFlow<List<BookOnDisk>>(emptyList())
   private val onlineContentLanguage = MutableStateFlow("")
   private val onlineCategoryContent = MutableStateFlow("")
   private val fileSystemStates =
     MutableStateFlow<FileSystemState>(FileSystemState.DetectingFileSystem)
   private val networkStates = MutableStateFlow(NetworkState.NOT_CONNECTED)
-  private val booksOnDiskListItems = MutableStateFlow<List<BooksOnDiskListItem>>(emptyList())
 
   @RegisterExtension
   private val mainDispatcherRule = MainDispatcherRule()
@@ -155,11 +119,6 @@ class ZimManageViewModelTest {
     every { connectivityBroadcastReceiver.action } returns "test"
     every { downloadRoomDao.downloads() } returns downloads
     every { libkiwixBookOnDisk.books() } returns books
-    every {
-      storageObserver.getBooksOnFileSystem(
-        any<ScanningProgressListener>()
-      )
-    } returns booksOnFileSystem
     every { fat32Checker.fileSystemStates } returns fileSystemStates
     every { connectivityBroadcastReceiver.networkStates } returns networkStates
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -170,7 +129,6 @@ class ZimManageViewModelTest {
     }
     every { application.getString(any()) } returns ""
     every { application.getString(any(), any()) } returns ""
-    every { dataSource.booksOnDiskAsListItems() } returns booksOnDiskListItems
     every {
       connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
     } returns networkCapabilities
@@ -199,32 +157,25 @@ class ZimManageViewModelTest {
     coEvery { kiwixService.getLibraryPage(any()) } returns response
     every { response.body() } returns ""
     downloads.value = emptyList()
-    booksOnFileSystem.value = emptyList()
     books.value = emptyList()
     fileSystemStates.value = FileSystemState.DetectingFileSystem
-    booksOnDiskListItems.value = emptyList()
     networkStates.value = NOT_CONNECTED
     onlineContentLanguage.value = ""
     viewModel =
       ZimManageViewModel(
         downloadRoomDao,
         libkiwixBookOnDisk,
-        storageObserver,
         kiwixService,
         application,
         connectivityBroadcastReceiver,
         fat32Checker,
-        dataSource,
         connectivityManager,
         onlineLibraryManager,
         kiwixDataStore,
         mainDispatcherRule.dispatcher
       ).apply {
         setIsUnitTestCase()
-        setAlertDialogShower(alertDialogShower)
-        setValidateZimViewModel(validateZimViewModel)
       }
-    viewModel.fileSelectListStates.value = FileSelectListState(emptyList())
     runBlocking {
       viewModel.networkLibrary.emit(
         OnlineLibraryResult(
@@ -263,49 +214,6 @@ class ZimManageViewModelTest {
       viewModel.onClearedExposed()
       verify {
         application.unregisterReceiver(connectivityBroadcastReceiver)
-      }
-    }
-  }
-
-  @Nested
-  inner class Books {
-    @Test
-    fun `emissions from data source are observed`() = flakyTest {
-      runTest {
-        val expectedList = listOf(bookOnDisk())
-        testFlow(
-          viewModel.fileSelectListStates.asFlow(),
-          triggerAction = { booksOnDiskListItems.emit(expectedList) },
-          assert = {
-            skipItems(1)
-            assertThat(awaitItem()).isEqualTo(FileSelectListState(expectedList))
-          }
-        )
-      }
-    }
-
-    @Test
-    fun `books found on filesystem are filtered by books already in db`() = flakyTest {
-      runTest {
-        every { application.getString(any()) } returns ""
-        val expectedBook = bookOnDisk(1L, libkiwixBook("1", nativeBook = BookTestWrapper("1")))
-        val bookToRemove = bookOnDisk(1L, libkiwixBook("2", nativeBook = BookTestWrapper("2")))
-        advanceUntilIdle()
-        viewModel.requestFileSystemCheck.emit(Unit)
-        advanceUntilIdle()
-        books.emit(listOf(bookToRemove))
-        advanceUntilIdle()
-        booksOnFileSystem.emit(
-          listOfNotNull(
-            expectedBook.book.nativeBook,
-            expectedBook.book.nativeBook,
-            bookToRemove.book.nativeBook
-          )
-        )
-        advanceUntilIdle()
-        coVerify(timeout = MOCKK_TIMEOUT_FOR_VERIFICATION) {
-          libkiwixBookOnDisk.insert(listOfNotNull(expectedBook.book.nativeBook))
-        }
       }
     }
   }
@@ -526,183 +434,6 @@ class ZimManageViewModelTest {
       }
     }
   }
-
-  @Nested
-  inner class SideEffects {
-    @Test
-    fun `RequestNavigateTo offers OpenFileWithNavigation with selected books`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk().apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk()), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestNavigateTo(selectedBook)) },
-          assert = { assertThat(awaitItem()).isEqualTo(OpenFileWithNavigation(selectedBook)) }
-        )
-      }
-    }
-
-    @Test
-    fun `RequestMultiSelection offers StartMultiSelection and selects a book`() = flakyTest {
-      runTest {
-        val bookToSelect = bookOnDisk(databaseId = 0L)
-        val unSelectedBook = bookOnDisk(databaseId = 1L)
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(
-            listOf(
-              bookToSelect,
-              unSelectedBook
-            ),
-            NORMAL
-          )
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestMultiSelection(bookToSelect)) },
-          assert = { assertThat(awaitItem()).isEqualTo(StartMultiSelection(viewModel.fileSelectActions)) }
-        )
-        viewModel.fileSelectListStates.test()
-          .assertValue(
-            FileSelectListState(
-              listOf(bookToSelect.apply { isSelected = !isSelected }, unSelectedBook),
-              MULTI
-            )
-          )
-      }
-    }
-
-    @Test
-    fun `RequestDeleteMultiSelection offers DeleteFiles with selected books`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk().apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk()), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestDeleteMultiSelection) },
-          assert = {
-            assertThat(awaitItem()).isEqualTo(
-              DeleteFiles(
-                listOf(selectedBook),
-                alertDialogShower
-              )
-            )
-          }
-        )
-      }
-    }
-
-    @Test
-    fun `RequestShareMultiSelection offers ShareFiles with selected books`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk().apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk()), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestShareMultiSelection) },
-          assert = {
-            assertThat(awaitItem()).isEqualTo(
-              ShareFiles(
-                listOf(selectedBook),
-                viewModel.viewModelScope,
-                mainDispatcherRule.dispatcher
-              )
-            )
-          }
-        )
-      }
-    }
-
-    @Test
-    fun `RequestValidateZimFiles offers ValidateZIMFiles with selected books`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk().apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk()), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestValidateZimFiles) },
-          assert = {
-            assertThat(awaitItem())
-              .isEqualTo(
-                ValidateZIMFiles(
-                  listOf(selectedBook),
-                  alertDialogShower,
-                  validateZimViewModel
-                )
-              )
-          }
-        )
-      }
-    }
-
-    @Test
-    fun `MultiModeFinished offers None`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk().apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk()), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(MultiModeFinished) },
-          assert = { assertThat(awaitItem()).isEqualTo(None) }
-        )
-        viewModel.fileSelectListStates.test().assertValue(
-          FileSelectListState(
-            listOf(
-              selectedBook.apply { isSelected = false },
-              bookOnDisk()
-            )
-          )
-        )
-      }
-    }
-
-    @Test
-    fun `RequestSelect offers None and inverts selection`() = flakyTest {
-      runTest {
-        val selectedBook = bookOnDisk(0L).apply { isSelected = true }
-        viewModel.fileSelectListStates.value =
-          FileSelectListState(listOf(selectedBook, bookOnDisk(1L)), NORMAL)
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RequestSelect(selectedBook)) },
-          assert = { assertThat(awaitItem()).isEqualTo(None) }
-        )
-        viewModel.fileSelectListStates.test().assertValue(
-          FileSelectListState(
-            listOf(
-              selectedBook.apply { isSelected = false },
-              bookOnDisk(1L)
-            )
-          )
-        )
-      }
-    }
-
-    @Test
-    fun `RestartActionMode offers StartMultiSelection`() = flakyTest {
-      runTest {
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(RestartActionMode) },
-          assert = { assert(awaitItem() == StartMultiSelection(viewModel.fileSelectActions)) }
-        )
-      }
-    }
-
-    @Test
-    fun `UserClickedDownloadBooksButton offers NavigateToDownloads`() = flakyTest {
-      runTest {
-        testFlow(
-          flow = viewModel.sideEffects,
-          triggerAction = { viewModel.fileSelectActions.emit(UserClickedDownloadBooksButton) },
-          assert = { assert(awaitItem() == NavigateToDownloads) }
-        )
-      }
-    }
-  }
 }
 
 suspend fun <T> TestScope.testFlow(
@@ -730,6 +461,3 @@ class BookTestWrapper(private val id: String) : Book(0L) {
   override fun equals(other: Any?): Boolean = other is BookTestWrapper && getId() == other.getId()
   override fun hashCode(): Int = getId().hashCode()
 }
-
-val TURBINE_TIMEOUT = 5000.toDuration(DurationUnit.MILLISECONDS)
-const val MOCKK_TIMEOUT_FOR_VERIFICATION = 1000L

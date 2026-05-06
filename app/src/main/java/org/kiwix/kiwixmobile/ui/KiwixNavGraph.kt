@@ -19,7 +19,6 @@
 package org.kiwix.kiwixmobile.ui
 
 import android.net.Uri
-import android.os.Bundle
 import androidx.activity.compose.LocalActivity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
