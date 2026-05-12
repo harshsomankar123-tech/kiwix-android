@@ -167,4 +167,12 @@ class KiwixSettingsFragmentTest {
     }
     LeakAssertions.assertNoLeaks()
   }
+
+  @Test
+  fun testRateAppPreference() {
+    settingsRobo {
+      clickRateAppPreference(composeTestRule)
+    }
+    LeakAssertions.assertNoLeaks()
+  }
 }

@@ -130,6 +130,10 @@ private class TestCoreSettingsViewModel(
   override suspend fun showLanguageCategory() {
     // Do nothing
   }
+
+  override suspend fun showRatingCategory() {
+    // Do nothing
+  }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -238,6 +242,7 @@ internal class CoreSettingsViewModelTest {
       coEvery { spyViewModel.showPrefWifiOnlyPreference() } just Runs
       coEvery { spyViewModel.showPermissionItem() } just Runs
       coEvery { spyViewModel.showLanguageCategory() } just Runs
+      coEvery { spyViewModel.showRatingCategory() } just Runs
 
       spyViewModel.initialize(activity)
 
@@ -246,6 +251,7 @@ internal class CoreSettingsViewModelTest {
       coVerify(exactly = 1) { spyViewModel.showPrefWifiOnlyPreference() }
       coVerify(exactly = 1) { spyViewModel.showPermissionItem() }
       coVerify(exactly = 1) { spyViewModel.showLanguageCategory() }
+      coVerify(exactly = 1) { spyViewModel.showRatingCategory() }
       val versionInfo = spyViewModel.uiState.value.versionInformation
 
       assertTrue(versionInfo.contains("Build"))
@@ -260,6 +266,7 @@ internal class CoreSettingsViewModelTest {
       coEvery { spyViewModel.showPrefWifiOnlyPreference() } just Runs
       coEvery { spyViewModel.showPermissionItem() } just Runs
       coEvery { spyViewModel.showLanguageCategory() } just Runs
+      coEvery { spyViewModel.showRatingCategory() } just Runs
 
       try {
         spyViewModel.initialize(activity)
@@ -640,6 +647,7 @@ internal class CoreSettingsViewModelTest {
         AllowPermission,
         RequestWriteStoragePermission,
         NavigateToAppSettingsDialog,
+        Action.RateApp,
         OnStorageItemClick(mockk()),
         ShowSnackbar("msg", this)
       )
