@@ -134,6 +134,7 @@ fun KiwixNavGraph(
         viewModel(viewModelStoreOwner = activity, factory = viewModelFactory)
       OnlineLibraryRoute(
         onlineLibraryViewModel = onlineLibraryViewModel,
+        viewModelFactory = viewModelFactory,
         alertDialogShower = alertDialogShower,
         navController = navController,
         activity = activity
