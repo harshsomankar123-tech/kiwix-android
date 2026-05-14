@@ -128,7 +128,6 @@ class DownloadServiceTest : BaseActivityTest() {
         it.navigate(KiwixDestination.Downloads.route)
       }
       downloadRobot {
-        clickDownloadOnBottomNav(composeTestRule)
         waitForDataToLoad(composeTestRule = composeTestRule)
         stopDownloadIfAlreadyStarted(composeTestRule, kiwixMainActivity)
         searchD3JsDocsFile(composeTestRule)
@@ -163,6 +162,7 @@ class DownloadServiceTest : BaseActivityTest() {
     InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
       AccessibilityService.GLOBAL_ACTION_HOME
     )
+    // Now we are downloading the small file so we need to check the service initialization.
     Assertions.assertEquals(
       isRunning,
       DownloadMonitorService.isDownloadMonitorServiceRunning
