@@ -222,7 +222,9 @@ class LanguageViewModelTest {
           count = 1
         }
       }
-      coEvery { kiwixService.getLanguages() } returns LanguageFeed().apply { this.entries = entries }
+      coEvery { kiwixService.getLanguages() } returns LanguageFeed().apply {
+        this.entries = entries
+      }
       every { kiwixDataStore.selectedOnlineContentLanguage } returns flowOf("eng,fra")
 
       createViewModel()
@@ -248,7 +250,9 @@ class LanguageViewModelTest {
         languageCode = testLanguage.languageCode
         count = 1
       }
-      coEvery { kiwixService.getLanguages() } returns LanguageFeed().apply { entries = listOf(entry) }
+      coEvery { kiwixService.getLanguages() } returns LanguageFeed().apply {
+        entries = listOf(entry)
+      }
       every { application.getString(any()) } returns "Error"
 
       createViewModel()

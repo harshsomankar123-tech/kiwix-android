@@ -67,6 +67,10 @@ class LanguageViewModel @Inject constructor(
   @CategoryKiwixService private val kiwixService: KiwixService,
   private val connectivityBroadcastReceiver: ConnectivityBroadcastReceiver
 ) : ViewModel() {
+  companion object {
+    var isTest = false
+  }
+
   val state = MutableStateFlow<State>(Loading)
   val actions = MutableSharedFlow<Action>(extraBufferCapacity = Int.MAX_VALUE)
   val effects = MutableSharedFlow<SideEffect<*>>(extraBufferCapacity = Int.MAX_VALUE)
