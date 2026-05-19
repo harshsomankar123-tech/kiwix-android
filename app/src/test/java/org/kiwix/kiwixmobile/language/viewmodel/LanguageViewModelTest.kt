@@ -115,7 +115,6 @@ class LanguageViewModelTest {
   }
 
   private fun createViewModel() {
-    LanguageViewModel.isTest = true
     languageViewModel =
       LanguageViewModel(
         application,

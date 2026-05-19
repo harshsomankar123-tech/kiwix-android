@@ -32,7 +32,7 @@ import org.kiwix.kiwixmobile.core.zim_manager.Category
 
 class SaveCategoryAndFinishTest {
   @Test
-  fun `invoke saves category and finishes`() = runTest {
+  fun `invoke saves single category and finishes`() = runTest {
     val kiwixDataStore = mockk<KiwixDataStore>()
     val activity = mockk<AppCompatActivity>()
     val lifeCycleScope = TestScope(testScheduler)
@@ -43,6 +43,24 @@ class SaveCategoryAndFinishTest {
     SaveCategoryAndFinish(listOf(category), kiwixDataStore, lifeCycleScope).invokeWith(activity)
     testScheduler.advanceUntilIdle()
     coEvery { kiwixDataStore.setSelectedOnlineContentCategory(category.category) }
+    testScheduler.advanceUntilIdle()
+    verify { onBackPressedDispatcher.onBackPressed() }
+  }
+
+  @Test
+  fun `invoke saves multiple categories and finishes`() = runTest {
+    val kiwixDataStore = mockk<KiwixDataStore>()
+    val activity = mockk<AppCompatActivity>()
+    val lifeCycleScope = TestScope(testScheduler)
+    val onBackPressedDispatcher = mockk<OnBackPressedDispatcher>()
+    every { activity.onBackPressedDispatcher } returns onBackPressedDispatcher
+    every { onBackPressedDispatcher.onBackPressed() } answers { }
+    val category1 = Category(category = "wikipedia", active = true)
+    val category2 = Category(category = "gutenberg", active = true)
+    val categories = listOf(category1, category2)
+    SaveCategoryAndFinish(categories, kiwixDataStore, lifeCycleScope).invokeWith(activity)
+    testScheduler.advanceUntilIdle()
+    coEvery { kiwixDataStore.setSelectedOnlineContentCategory("wikipedia,gutenberg") }
     testScheduler.advanceUntilIdle()
     verify { onBackPressedDispatcher.onBackPressed() }
   }

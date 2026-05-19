@@ -193,6 +193,7 @@ class ZimManageViewModelTest {
     }
   }
 
+  @Nested
   inner class SideEffects {
     @Test
     fun `RequestNavigateTo offers OpenFileWithNavigation with selected books`() = flakyTest {

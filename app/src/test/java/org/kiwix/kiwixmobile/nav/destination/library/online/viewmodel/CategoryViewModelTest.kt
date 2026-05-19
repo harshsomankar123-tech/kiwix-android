@@ -33,19 +33,17 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.RegisterExtension
 import org.kiwix.kiwixmobile.R.string
 import org.kiwix.kiwixmobile.core.data.remote.CategoryFeed
 import org.kiwix.kiwixmobile.core.data.remote.CategoryEntry
@@ -62,6 +60,7 @@ import org.kiwix.kiwixmobile.nav.destination.library.online.viewmodel.State.Load
 import org.kiwix.kiwixmobile.zimManager.awaitItemOfType
 import org.kiwix.kiwixmobile.zimManager.testFlow
 import org.kiwix.sharedFunctions.InstantExecutorExtension
+import org.kiwix.sharedFunctions.MainDispatcherRule
 import org.kiwix.sharedFunctions.category
 
 @ExtendWith(InstantExecutorExtension::class)
@@ -73,17 +72,17 @@ class CategoryViewModelTest {
   private val networkStates = MutableStateFlow(NetworkState.CONNECTED)
   private lateinit var categoryViewModel: CategoryViewModel
   private var categories: MutableStateFlow<List<Category>?> = MutableStateFlow(null)
-  private val testDispatcher = UnconfinedTestDispatcher()
+
+  @RegisterExtension
+  val dispatcherRule = MainDispatcherRule(UnconfinedTestDispatcher())
 
   @AfterEach
   fun tearDown() {
-    Dispatchers.resetMain()
     CategorySessionCache.hasFetched = false
   }
 
   @BeforeEach
   fun init() {
-    Dispatchers.setMain(testDispatcher)
     clearAllMocks()
     every { application.getString(any()) } returns "Error"
     every { connectivityBroadcastReceiver.action } returns "test"
@@ -104,7 +103,6 @@ class CategoryViewModelTest {
   }
 
   private fun createViewModel() {
-    CategoryViewModel.isTest = true
     categoryViewModel =
       CategoryViewModel(
         application,
@@ -144,7 +142,7 @@ class CategoryViewModelTest {
 
   @Test
   fun `initial state is Loading`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       coEvery { kiwixService.getCategories() } coAnswers { awaitCancellation() }
       createViewModel()
       assertThat(categoryViewModel.state.value).isEqualTo(Loading)
@@ -152,7 +150,7 @@ class CategoryViewModelTest {
   }
 
   @Test
-  fun `an empty categories emission does not send update action`() = runTest(testDispatcher) {
+  fun `an empty categories emission does not send update action`() = runTest {
     createViewModel()
     testFlow(
       categoryViewModel.actions,
@@ -164,7 +162,7 @@ class CategoryViewModelTest {
   @OptIn(ExperimentalCoroutinesApi::class)
   @Test
   fun `Save uses active category`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       val activeCategory = category(category = "wikipedia").copy(active = true)
       val inactiveCategory = category(category = "Gutenberg").copy(active = false)
       val entries = listOf(activeCategory, inactiveCategory).map { cat ->
@@ -189,7 +187,7 @@ class CategoryViewModelTest {
 
   @Test
   fun `online and api returns empty emits Error when no cache`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       coEvery { kiwixService.getCategories() } returns CategoryFeed()
       coEvery { application.getString(string.no_category_available) } returns "No category available"
 
@@ -205,7 +203,7 @@ class CategoryViewModelTest {
   @OptIn(ExperimentalCoroutinesApi::class)
   @Test
   fun `online api throws exception falls back to error`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       coEvery { kiwixService.getCategories() } throws RuntimeException()
 
       createViewModel()
@@ -222,7 +220,7 @@ class CategoryViewModelTest {
 
   @Test
   fun `offline uses cached categories`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       networkStates.value = NetworkState.NOT_CONNECTED
 
       val cached =
@@ -245,7 +243,7 @@ class CategoryViewModelTest {
 
   @Test
   fun `offline and no cache emits no network error`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       networkStates.value = NetworkState.NOT_CONNECTED
 
       createViewModel()
@@ -259,7 +257,7 @@ class CategoryViewModelTest {
 
   @Test
   fun `session cache skips api call`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       CategorySessionCache.hasFetched = true
 
       val cached =
@@ -284,7 +282,7 @@ class CategoryViewModelTest {
   @OptIn(ExperimentalCoroutinesApi::class)
   @Test
   fun `UpdateCategory changes Loading to Content`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       CategorySessionCache.hasFetched = false
       coEvery { kiwixDataStore.cachedOnlineCategoryList } returns flowOf(emptyList())
       coEvery { kiwixService.getCategories() } coAnswers { awaitCancellation() }
@@ -306,7 +304,7 @@ class CategoryViewModelTest {
   @OptIn(ExperimentalCoroutinesApi::class)
   @Test
   fun `Filter updates content`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       CategorySessionCache.hasFetched = false
       coEvery { kiwixService.getCategories() } coAnswers { awaitCancellation() }
 
@@ -334,7 +332,7 @@ class CategoryViewModelTest {
   @OptIn(ExperimentalCoroutinesApi::class)
   @Test
   fun `Select emits side effect and moves to Saving`() = flakyTest {
-    runTest(testDispatcher) {
+    runTest {
       coEvery { kiwixService.getCategories() } returns CategoryFeed()
 
       val entry = CategoryEntry().apply { title = "Wikipedia" }
