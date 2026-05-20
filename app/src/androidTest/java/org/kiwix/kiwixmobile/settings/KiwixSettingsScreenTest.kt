@@ -50,7 +50,7 @@ import org.kiwix.kiwixmobile.testutils.TestUtils.isSystemUINotRespondingDialogVi
 import org.kiwix.kiwixmobile.ui.KiwixDestination
 import org.kiwix.kiwixmobile.utils.StandardActions
 
-class KiwixSettingsFragmentTest {
+class KiwixSettingsScreenTest {
   @Rule(order = RETRY_RULE_ORDER)
   @JvmField
   val retryRule = RetryRule()
@@ -164,13 +164,6 @@ class KiwixSettingsFragmentTest {
       clickCredits(composeTestRule)
       assertContributorsDialogDisplayed(composeTestRule)
       dismissDialog()
-    }
-    LeakAssertions.assertNoLeaks()
-  }
-
-  @Test
-  fun testRateAppPreference() {
-    settingsRobo {
       clickRateAppPreference(composeTestRule)
     }
     LeakAssertions.assertNoLeaks()
