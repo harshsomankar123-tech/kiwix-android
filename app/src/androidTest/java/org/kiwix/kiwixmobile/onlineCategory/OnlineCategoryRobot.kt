@@ -37,6 +37,7 @@ import org.kiwix.kiwixmobile.R
 import org.kiwix.kiwixmobile.core.ui.components.TOOLBAR_TITLE_TESTING_TAG
 import org.kiwix.kiwixmobile.nav.destination.library.online.CATEGORY_ITEM_RADIO_BUTTON_TESTING_TAG
 import org.kiwix.kiwixmobile.nav.destination.library.online.CATEGORY_MENU_ICON_TESTING_TAG
+import org.kiwix.kiwixmobile.nav.destination.library.online.ONLINE_CATEGORY_LIST_TEST_TAG
 import org.kiwix.kiwixmobile.testutils.TestUtils
 import org.kiwix.kiwixmobile.testutils.TestUtils.testFlakyView
 
@@ -69,7 +70,7 @@ class OnlineCategoryRobot : BaseRobot() {
     composeTestRule: ComposeContentTestRule,
     matchLanguage: String
   ) {
-    composeTestRule.onNodeWithTag("category_list")
+    composeTestRule.onNodeWithTag(ONLINE_CATEGORY_LIST_TEST_TAG)
       .performScrollToNode(hasTestTag("$CATEGORY_ITEM_RADIO_BUTTON_TESTING_TAG$matchLanguage"))
     composeTestRule.onNodeWithTag("$CATEGORY_ITEM_RADIO_BUTTON_TESTING_TAG$matchLanguage")
       .performClick()
@@ -102,7 +103,7 @@ class OnlineCategoryRobot : BaseRobot() {
   fun assertCategorySelected(composeTestRule: ComposeContentTestRule, matchLanguage: String) {
     composeTestRule.apply {
       waitForIdle()
-      onNodeWithTag("category_list")
+      onNodeWithTag(ONLINE_CATEGORY_LIST_TEST_TAG)
         .performScrollToNode(hasTestTag("$CATEGORY_ITEM_RADIO_BUTTON_TESTING_TAG$matchLanguage"))
       onNodeWithTag("$CATEGORY_ITEM_RADIO_BUTTON_TESTING_TAG$matchLanguage")
         .assertIsOn()
