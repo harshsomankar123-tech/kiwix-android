@@ -16,7 +16,7 @@
  *
  */
 
-package org.kiwix.kiwixmobile
+package org.kiwix.kiwixmobile.core.data
 
 import android.content.Context
 import android.os.Build
@@ -35,10 +35,10 @@ import org.kiwix.kiwixmobile.core.dao.HistoryRoomDao
 import org.kiwix.kiwixmobile.core.dao.NotesRoomDao
 import org.kiwix.kiwixmobile.core.dao.RecentSearchRoomDao
 import org.kiwix.kiwixmobile.core.dao.entities.RecentSearchRoomEntity
-import org.kiwix.kiwixmobile.core.data.KiwixRoomDatabase
 import org.kiwix.kiwixmobile.core.page.history.models.HistoryListItem
 import org.kiwix.kiwixmobile.core.page.notes.models.NoteListItem
 import org.kiwix.kiwixmobile.core.reader.ZimReaderSource
+import org.kiwix.sharedFunctions.TestApplication
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
@@ -50,19 +50,31 @@ class KiwixRoomDatabaseTest {
   private lateinit var db: KiwixRoomDatabase
   private lateinit var historyRoomDao: HistoryRoomDao
   private lateinit var notesRoomDao: NotesRoomDao
+  private lateinit var context: Context
+  private lateinit var databaseFile: File
 
   @Before
   fun setUpDatabase() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    db =
-      Room.inMemoryDatabaseBuilder(context, KiwixRoomDatabase::class.java)
-        .allowMainThreadQueries()
-        .build()
+    context = ApplicationProvider.getApplicationContext()
+    databaseFile = context.getDatabasePath(RoomDowngradeBackupHelper.DB_NAME)
+
+    cleanupDatabase()
+    db = Room.inMemoryDatabaseBuilder(context, KiwixRoomDatabase::class.java)
+      .allowMainThreadQueries()
+      .build()
   }
 
   @After
   fun teardown() {
     db.close()
+    KiwixRoomDatabase.destroyInstance()
+    cleanupDatabase()
+  }
+
+  private fun cleanupDatabase() {
+    if (databaseFile.exists()) {
+      databaseFile.deleteRecursively()
+    }
   }
 
   @Test
@@ -188,6 +200,58 @@ class KiwixRoomDatabaseTest {
       notesList = notesRoomDao.notes().first() as List<NoteListItem>
       assertEquals(notesList.size, 0)
     }
+
+  @Test
+  fun `database callback restores snapshot into newly created database`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    context.deleteDatabase(RoomDowngradeBackupHelper.DB_NAME)
+
+    val snapshot =
+      RoomDowngradeBackupHelper.DatabaseSnapshot(
+        notes = listOf(
+          RoomDowngradeBackupHelper.RowSnapshot(
+            values = mapOf(
+              "zimId" to "zim-id",
+              "zimUrl" to "https://kiwix.app/page",
+              "noteTitle" to "Restored Note",
+              "noteFilePath" to "/notes/restored.txt",
+              "favicon" to null,
+              "zimReaderSource" to null
+            )
+          )
+        ),
+        history = emptyList(),
+        recentSearches = emptyList()
+      )
+
+    val callBack =
+      KiwixRoomDatabase.createRestoreCallback(snapshot)
+
+    val db =
+      Room.databaseBuilder(
+        context,
+        KiwixRoomDatabase::class.java,
+        RoomDowngradeBackupHelper.DB_NAME
+      )
+        .addCallback(callBack)
+        .allowMainThreadQueries()
+        .build()
+
+    val notes =
+      db.notesRoomDao().notes().first() as List<NoteListItem>
+
+    assertEquals(1, notes.size)
+
+    with(notes.first()) {
+      assertEquals("zim-id", zimId)
+      assertEquals("https://kiwix.app/page", zimUrl)
+      assertEquals("Restored Note", title)
+      assertEquals("/notes/restored.txt", noteFilePath)
+    }
+
+    db.close()
+  }
 
   companion object {
     fun getHistoryItem(
