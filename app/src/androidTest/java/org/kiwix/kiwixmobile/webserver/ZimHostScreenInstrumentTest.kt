@@ -119,6 +119,8 @@ class ZimHostScreenInstrumentTest {
           setPrefLanguage("en")
           setLastDonationPopupShownInMilliSeconds(System.currentTimeMillis())
           setIsScanFileSystemDialogShown(true)
+          setShowManageExternalFilesPermissionDialog(false)
+          setManageExternalFilesPermissionDialogOnRefresh(false)
           setIsFirstRun(false)
           setIsPlayStoreBuild(true)
           setPrefIsTest(true)
@@ -145,7 +147,7 @@ class ZimHostScreenInstrumentTest {
 
   @Test
   fun testZimHostScreen() {
-    if (isWifiEnabled()) {
+    if (isWifiEnabled() && Build.VERSION.SDK_INT != Build.VERSION_CODES.VANILLA_ICE_CREAM) {
       activityScenario.onActivity {
         kiwixMainActivity = it
         it.navigate(KiwixDestination.Library.route)
@@ -252,7 +254,9 @@ class ZimHostScreenInstrumentTest {
   private fun loadZimFileInApplication(zimFileName: String) {
     val loadFileStream =
       ZimHostScreenInstrumentTest::class.java.classLoader?.getResourceAsStream(zimFileName)
-        ?: error("Error loading resource for $zimFileName")
+    require(loadFileStream != null) {
+      "Unable to load the $zimFileName. Please check is it exist in resources folder."
+    }
     val zimFile = runBlocking { File(kiwixDataStore.defaultStorage(), zimFileName) }
     if (zimFile.exists()) zimFile.delete()
     zimFile.createNewFile()

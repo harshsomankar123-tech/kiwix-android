@@ -25,6 +25,7 @@ import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.core.os.LocaleListCompat
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.test.internal.runner.junit4.statement.UiThreadStatement
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,11 +33,9 @@ import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResultUtils.matchesCheck
 import com.google.android.apps.common.testing.accessibility.framework.checks.DuplicateClickableBoundsCheck
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.hamcrest.Matchers.anyOf
 import org.junit.After
 import org.junit.Assert
@@ -46,6 +45,7 @@ import org.junit.Test
 import org.kiwix.kiwixmobile.BaseActivityTest
 import org.kiwix.kiwixmobile.core.extensions.deleteFile
 import org.kiwix.kiwixmobile.core.extensions.isFileExist
+import org.kiwix.kiwixmobile.core.reader.integrity.ValidateZimViewModel
 import org.kiwix.kiwixmobile.core.settings.StorageCalculator
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.COMPOSE_TEST_RULE_ORDER
 import org.kiwix.kiwixmobile.core.utils.TestingUtils.RETRY_RULE_ORDER
@@ -56,13 +56,14 @@ import org.kiwix.kiwixmobile.nav.destination.library.CopyMoveFileHandler
 import org.kiwix.kiwixmobile.nav.destination.library.library
 import org.kiwix.kiwixmobile.nav.destination.library.local.CopyMoveProgressBarControllerImpl
 import org.kiwix.kiwixmobile.nav.destination.library.local.FileOperationHandlerImpl
-import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryFragment
+import org.kiwix.kiwixmobile.nav.destination.library.local.LocalLibraryViewModel
 import org.kiwix.kiwixmobile.testutils.RetryRule
 import org.kiwix.kiwixmobile.testutils.TestUtils
 import org.kiwix.kiwixmobile.testutils.TestUtils.waitUntilTimeout
 import org.kiwix.kiwixmobile.ui.KiwixDestination
 import org.kiwix.kiwixmobile.zimManager.Fat32Checker
 import org.kiwix.kiwixmobile.zimManager.FileWritingFileSystemChecker
+import org.kiwix.sharedFunctions.MainDispatcherRule
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -74,6 +75,9 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
 
   @get:Rule(order = COMPOSE_TEST_RULE_ORDER)
   val composeTestRule = createAndroidComposeRule<KiwixMainActivity>()
+
+  @get:Rule
+  private val dispatcher = MainDispatcherRule()
   private lateinit var kiwixDataStore: KiwixDataStore
   private lateinit var kiwixMainActivity: KiwixMainActivity
   private lateinit var selectedFile: File
@@ -161,7 +165,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
       TestUtils.deleteTemporaryFilesOfTestCases(context)
 
       // Test multiple files copying.
-      navigateToLocalLibraryFragment()
+      navigateToLocalLibraryScreen()
       deleteZimFilesIfExistInLocalLibrary()
       val invalidZimFile = getInvalidZimFileUri(".mp4")
       selectedFile = getSelectedFile("testzim.zim")
@@ -228,7 +232,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
       TestUtils.deleteTemporaryFilesOfTestCases(context)
 
       // Test multiple files copying.
-      navigateToLocalLibraryFragment()
+      navigateToLocalLibraryScreen()
       deleteZimFilesIfExistInLocalLibrary()
       val invalidZimFile = getInvalidZimFileUri(".mp4")
       selectedFile = getSelectedFile("testzim.zim")
@@ -253,11 +257,11 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
   }
 
   private fun assertZimFileAddedInTheLocalLibrary() {
-    navigateToLocalLibraryFragment()
+    navigateToLocalLibraryScreen()
     copyMoveFileHandler { assertZimFileAddedInTheLocalLibrary(composeTestRule) }
   }
 
-  private fun navigateToLocalLibraryFragment() {
+  private fun navigateToLocalLibraryScreen() {
     UiThreadStatement.runOnUiThread {
       kiwixMainActivity.navigate(KiwixDestination.Library.route)
     }
@@ -272,18 +276,41 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
   }
 
   private fun showMoveFileToPublicDirectoryDialog(urisList: List<Uri>) {
-    kiwixMainActivity.lifecycleScope.launch {
-      val localLibraryFragment =
-        kiwixMainActivity.supportFragmentManager.fragments
-          .filterIsInstance<LocalLibraryFragment>()
-          .firstOrNull()
-      localLibraryFragment?.handleSelectedFileUri(urisList)
+    composeTestRule.runOnIdle {
+      kiwixMainActivity = composeTestRule.activity
+
+      val localLibraryViewModel = ViewModelProvider(
+        kiwixMainActivity,
+        kiwixMainActivity.viewModelFactory
+      )[LocalLibraryViewModel::class.java]
+
+      val validateZimViewModel = ViewModelProvider(
+        kiwixMainActivity,
+        kiwixMainActivity.viewModelFactory
+      )[ValidateZimViewModel::class.java]
+      val storageDeviceList = runBlocking { kiwixMainActivity.getStorageDeviceList() }
+      localLibraryViewModel.initialize(
+        storageDeviceList = storageDeviceList,
+        validateZimViewModel = validateZimViewModel,
+        kiwixMainActivity.alertDialogShower,
+        kiwixMainActivity.snackBarHostState,
+        kiwixMainActivity.supportFragmentManager
+      )
+      kiwixMainActivity.lifecycleScope.launch {
+        localLibraryViewModel.handleSelectedFileUri(urisList)
+        localLibraryViewModel.sideEffects.collect { effect ->
+          effect.invokeWith(kiwixMainActivity)
+        }
+      }
     }
   }
 
   private fun getSelectedFile(fileName: String): File {
     val loadFileStream =
-      CopyMoveFileHandlerTest::class.java.classLoader.getResourceAsStream(fileName)
+      CopyMoveFileHandlerTest::class.java.classLoader?.getResourceAsStream(fileName)
+    require(loadFileStream != null) {
+      "Unable to load the $fileName. Please check is it exist in resources folder."
+    }
     val zimFile = File(context.getExternalFilesDirs(null)[0], fileName)
     if (zimFile.exists()) zimFile.delete()
     zimFile.createNewFile()
@@ -322,8 +349,8 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
       kiwixMainActivity,
       kiwixDataStore,
       StorageCalculator(kiwixDataStore),
-      Fat32Checker(kiwixDataStore, listOf(FileWritingFileSystemChecker()), Dispatchers.IO),
-      FileOperationHandlerImpl(kiwixMainActivity),
+      Fat32Checker(kiwixDataStore, listOf(FileWritingFileSystemChecker()), dispatcher.dispatcher),
+      FileOperationHandlerImpl(kiwixMainActivity, dispatcher.dispatcher),
       CopyMoveProgressBarControllerImpl(kiwixMainActivity)
     ).apply {
       setAlertDialogShower(AlertDialogShower())
@@ -344,9 +371,7 @@ class CopyMoveFileHandlerTest : BaseActivityTest() {
         destinationFile.name,
         "testCopyMove_1.zim"
       )
-      withContext(Dispatchers.IO) {
-        deleteBothPreviousFiles()
-      }
+      deleteBothPreviousFiles()
 
       // test when there is no zim file available in the storage it should return the same fileName
       selectedFile = File(parentFile, selectedFileName)

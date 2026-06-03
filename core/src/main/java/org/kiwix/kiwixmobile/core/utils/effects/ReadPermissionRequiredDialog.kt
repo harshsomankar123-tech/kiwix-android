@@ -16,19 +16,19 @@
  *
  */
 
-package org.kiwix.kiwixmobile.core.extensions
+package org.kiwix.kiwixmobile.core.utils.effects
 
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.MultiplePermissionsState
+import androidx.appcompat.app.AppCompatActivity
+import org.kiwix.kiwixmobile.core.base.SideEffect
+import org.kiwix.kiwixmobile.core.extensions.navigateToAppSettings
+import org.kiwix.kiwixmobile.core.utils.dialog.AlertDialogShower
+import org.kiwix.kiwixmobile.core.utils.dialog.KiwixDialog
 
-@OptIn(ExperimentalPermissionsApi::class)
-fun MultiplePermissionsState.handlePermissionRequest(
-  onGranted: () -> Unit,
-  onRationale: () -> Unit
-) {
-  when {
-    allPermissionsGranted -> onGranted()
-    shouldShowRationale -> onRationale()
-    else -> launchMultiplePermissionRequest()
+class ReadPermissionRequiredDialog(private val dialogShower: AlertDialogShower) : SideEffect<Unit> {
+  override fun invokeWith(activity: AppCompatActivity) {
+    dialogShower.show(
+      KiwixDialog.ReadPermissionRequired,
+      { activity.navigateToAppSettings() }
+    )
   }
 }

@@ -16,10 +16,21 @@
  *
  */
 
-package org.kiwix.kiwixmobile.core.di
+package org.kiwix.kiwixmobile.zimManager.fileselectView.effects
 
-import javax.inject.Qualifier
+import androidx.appcompat.app.AppCompatActivity
+import io.mockk.Called
+import io.mockk.mockk
+import io.mockk.verify
+import org.junit.jupiter.api.Test
 
-@Qualifier
-@Retention(AnnotationRetention.RUNTIME)
-annotation class CategoryKiwixService
+class NoneTest {
+  @Test
+  fun `invokeWith should do nothing`() {
+    val activity = mockk<AppCompatActivity>(relaxed = true)
+
+    None.invokeWith(activity)
+
+    verify { activity wasNot Called }
+  }
+}
