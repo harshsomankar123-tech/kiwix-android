@@ -53,6 +53,11 @@ import org.kiwix.kiwixmobile.core.utils.files.SaveResult
 import org.kiwix.videowebview.VideoEnabledWebChromeClient.ToggledFullscreenCallback
 import org.kiwix.videowebview.VideoEnabledWebView
 import javax.inject.Inject
+import android.content.res.Configuration
+import android.os.Build
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import org.kiwix.kiwixmobile.core.ThemeConfig
 
 private const val INITIAL_SCALE = 100
 
@@ -71,6 +76,7 @@ open class KiwixWebView constructor(
 
   private var kiwixWebChromeClient: KiwixWebChromeClient? = null
   private var textZoomJob: Job? = null
+  private var themeJob: Job? = null
 
   private fun setWindowVisibility(isFullScreen: Boolean) {
     (context as Activity).window.apply {
@@ -152,12 +158,50 @@ open class KiwixWebView constructor(
     textZoomJob = kiwixDataStore.textZoom
       .onEach { settings.textZoom = it }
       .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Main))
+
+    themeJob?.cancel()
+    themeJob = kiwixDataStore.appTheme
+      .onEach { theme ->
+        val isDark = when (theme) {
+          ThemeConfig.Theme.DARK -> true
+          ThemeConfig.Theme.LIGHT -> false
+          ThemeConfig.Theme.SYSTEM -> {
+            val currentNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            currentNightMode == Configuration.UI_MODE_NIGHT_YES
+          }
+        }
+        applyThemeDarkening(isDark)
+      }
+      .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Main))
+  }
+
+  @Suppress("DEPRECATION")
+  private fun applyThemeDarkening(isDark: Boolean) {
+    if (isDark) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        settings.isAlgorithmicDarkeningAllowed = true
+      } else {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+          WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_ON)
+        }
+      }
+    } else {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        settings.isAlgorithmicDarkeningAllowed = false
+      } else {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+          WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_OFF)
+        }
+      }
+    }
   }
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
     textZoomJob?.cancel()
     textZoomJob = null
+    themeJob?.cancel()
+    themeJob = null
   }
 
   override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
