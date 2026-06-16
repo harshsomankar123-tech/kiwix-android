@@ -184,6 +184,12 @@ open class KiwixWebView constructor(
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
           WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_ON)
         }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+          WebSettingsCompat.setForceDarkStrategy(
+            settings,
+            WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
+          )
+        }
       }
     } else {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
