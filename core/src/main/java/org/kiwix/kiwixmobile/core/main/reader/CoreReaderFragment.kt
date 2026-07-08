@@ -28,6 +28,10 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.media.AudioManager
 import android.media.AudioManager.OnAudioFocusChangeListener
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -282,6 +286,19 @@ abstract class CoreReaderFragment :
   private var documentParserJs: String? = null
   private var documentParser: DocumentParser? = null
   private var tts: KiwixTextToSpeech? = null
+  private var mediaSession: MediaSession? = null
+  private var isNoisyReceiverRegistered = false
+  private val audioBecomingNoisyReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+        tts?.currentTTSTask?.let {
+          if (!it.paused) {
+            pauseTts()
+          }
+        }
+      }
+    }
+  }
   private var compatCallback: CompatFindActionModeCallback? = null
   private var zimReaderSource: ZimReaderSource? = null
   private var actionMode: ActionMode? = null
@@ -994,6 +1011,9 @@ abstract class CoreReaderFragment :
                 readerMenuState?.onTextToSpeechStarted()
                 readerScreenState.update { copy(showTtsControls = true) }
                 setActionAndStartTTSService(ACTION_PAUSE_OR_RESUME_TTS, false)
+                initMediaSession()
+                registerNoisyReceiver()
+                updatePlaybackState(true)
               }
             }
 
@@ -1007,6 +1027,9 @@ abstract class CoreReaderFragment :
                   )
                 }
                 setActionAndStartTTSService(ACTION_STOP_TTS)
+                unregisterNoisyReceiver()
+                updatePlaybackState(false)
+                mediaSession?.isActive = false
               }
             }
           },
@@ -1058,6 +1081,9 @@ abstract class CoreReaderFragment :
     if (tts?.currentTTSTask == null) {
       tts?.stop()
       setActionAndStartTTSService(ACTION_STOP_TTS)
+      unregisterNoisyReceiver()
+      updatePlaybackState(false)
+      mediaSession?.isActive = false
       return
     }
     tts?.currentTTSTask?.let {
@@ -1067,12 +1093,16 @@ abstract class CoreReaderFragment :
           copy(pauseTtsButtonText = context?.getString(string.tts_pause).orEmpty())
         }
         setActionAndStartTTSService(ACTION_PAUSE_OR_RESUME_TTS, false)
+        registerNoisyReceiver()
+        updatePlaybackState(true)
       } else {
         tts?.pauseOrResume()
         readerScreenState.update {
           copy(pauseTtsButtonText = context?.getString(string.tts_resume).orEmpty())
         }
         setActionAndStartTTSService(ACTION_PAUSE_OR_RESUME_TTS, true)
+        unregisterNoisyReceiver()
+        updatePlaybackState(false)
       }
     }
   }
@@ -1080,6 +1110,9 @@ abstract class CoreReaderFragment :
   private fun stopTts() {
     tts?.stop()
     setActionAndStartTTSService(ACTION_STOP_TTS)
+    unregisterNoisyReceiver()
+    updatePlaybackState(false)
+    mediaSession?.isActive = false
   }
 
   // Reset the Locale and change the font of all TextViews and its subclasses, if necessary
@@ -1098,6 +1131,9 @@ abstract class CoreReaderFragment :
         shutdown()
         tts = null
       }
+      unregisterNoisyReceiver()
+      mediaSession?.release()
+      mediaSession = null
     }.onFailure {
       Log.e(
         TAG_KIWIX,
@@ -1106,7 +1142,75 @@ abstract class CoreReaderFragment :
     }
   }
 
+  private fun initMediaSession() {
+    val ctx = context ?: return
+    if (mediaSession != null) return
+
+    val session = MediaSession(ctx, "KiwixReadAloud").apply {
+      setCallback(object : MediaSession.Callback() {
+        override fun onPlay() {
+          super.onPlay()
+          tts?.currentTTSTask?.let {
+            if (it.paused) {
+              pauseTts()
+            }
+          }
+        }
+
+        override fun onPause() {
+          super.onPause()
+          tts?.currentTTSTask?.let {
+            if (!it.paused) {
+              pauseTts()
+            }
+          }
+        }
+
+        override fun onStop() {
+          super.onStop()
+          stopTts()
+        }
+      })
+      isActive = true
+    }
+    mediaSession = session
+  }
+
+  private fun updatePlaybackState(isPlaying: Boolean) {
+    val session = mediaSession ?: return
+    val stateBuilder = PlaybackState.Builder()
+      .setActions(
+        PlaybackState.ACTION_PLAY or
+        PlaybackState.ACTION_PAUSE or
+        PlaybackState.ACTION_PLAY_PAUSE or
+        PlaybackState.ACTION_STOP
+      )
+    val state = if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
+    stateBuilder.setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+    session.setPlaybackState(stateBuilder.build())
+  }
+
+  private fun registerNoisyReceiver() {
+    if (!isNoisyReceiverRegistered) {
+      val filter = IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+      context?.registerReceiver(audioBecomingNoisyReceiver, filter)
+      isNoisyReceiverRegistered = true
+    }
+  }
+
+  private fun unregisterNoisyReceiver() {
+    if (isNoisyReceiverRegistered) {
+      runCatching {
+        context?.unregisterReceiver(audioBecomingNoisyReceiver)
+      }
+      isNoisyReceiverRegistered = false
+    }
+  }
+
   override fun onDestroyView() {
+    unregisterNoisyReceiver()
+    mediaSession?.release()
+    mediaSession = null
     super.onDestroyView()
     destroyViews()
   }
