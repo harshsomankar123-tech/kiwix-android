@@ -655,9 +655,9 @@ class KiwixDataStore @Inject constructor(
     context.kiwixDataStore.edit { prefs ->
       prefs[PreferencesKeys.RATE_APP_COUNT] = 0
       prefs[PreferencesKeys.RATE_APP_READING_COUNT] = 0
+      prefs[PreferencesKeys.RATE_APP_DOWNLOAD_COMPLETED] = false
     }
   }
-
   companion object {
     // Prefs
     const val PREF_LANG = "pref_language_chooser"

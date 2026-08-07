@@ -849,8 +849,6 @@ class KiwixDataStoreTest {
 
     assertThat(kiwixDataStore.rateAppCount.first()).isEqualTo(0)
     assertThat(kiwixDataStore.rateAppReadingCount.first()).isEqualTo(0)
-    // Download completed state should be preserved since the user
-    // already downloaded a ZIM file. Only visit and reading counts reset.
-    assertThat(kiwixDataStore.rateAppDownloadCompleted.first()).isTrue()
+    assertThat(kiwixDataStore.rateAppDownloadCompleted.first()).isFalse()
   }
 }
