@@ -22,6 +22,7 @@ import android.app.Activity
 import android.content.Intent
 import android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.kiwix.kiwixmobile.core.R
@@ -75,9 +76,9 @@ class ExternalLinkOpener @Inject constructor(
       { openLink(intent) },
       { },
       {
-        lifecycleScope.launch {
+        openLink(intent)
+        lifecycleScope.launch(NonCancellable) {
           kiwixDataStore.setExternalLinkPopup(false)
-          openLink(intent)
         }
       },
       uri = intent.data

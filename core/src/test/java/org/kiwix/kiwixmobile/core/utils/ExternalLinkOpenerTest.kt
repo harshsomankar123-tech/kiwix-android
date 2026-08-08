@@ -188,12 +188,46 @@ class ExternalLinkOpenerTest {
       val (dialog, listeners, _) = dialogData!!
       assert(dialog == KiwixDialog.ExternalLinkPopup)
       listeners[2].invoke()
+      val startedIntent = Shadows.shadowOf(activity).nextStartedActivity
+      assertNotNull(startedIntent)
       advanceUntilIdle()
       coVerify {
         kiwixDataStore.setExternalLinkPopup(false)
       }
+    }
+
+  @Test
+  fun neutralButtonClickPersistsPreferenceWithNonCancellableContextWhenScopeIsCancelled() =
+    runTest {
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/"))
+      Shadows.shadowOf(activity.packageManager).addResolveInfoForIntent(
+        intent,
+        ResolveInfo().apply {
+          activityInfo = ActivityInfo().apply {
+            packageName = "com.example"
+            name = "ExampleActivity"
+          }
+        }
+      )
+      every { kiwixDataStore.externalLinkPopup } returns flowOf(true)
+      coJustRun { kiwixDataStore.setExternalLinkPopup(any()) }
+      val externalLinkOpener = ExternalLinkOpener(kiwixDataStore).apply {
+        initialize(activity, alertDialogShower)
+      }
+      val cancelableJob = kotlinx.coroutines.Job()
+      val scopeToCancel = CoroutineScope(StandardTestDispatcher(testScheduler) + cancelableJob)
+      externalLinkOpener.openExternalUrl(intent, lifecycleScope = scopeToCancel)
+      val dialogData = alertDialogShower.dialogState.value
+      assertNotNull(dialogData)
+      val (_, listeners, _) = dialogData!!
+      listeners[2].invoke()
       val startedIntent = Shadows.shadowOf(activity).nextStartedActivity
       assertNotNull(startedIntent)
+      cancelableJob.cancel()
+      advanceUntilIdle()
+      coVerify {
+        kiwixDataStore.setExternalLinkPopup(false)
+      }
     }
 
   @Test
