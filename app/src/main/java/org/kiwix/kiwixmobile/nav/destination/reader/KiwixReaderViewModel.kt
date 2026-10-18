@@ -126,7 +126,7 @@ class KiwixReaderViewModel @Inject constructor(
   ) {
     super.initialize(coreMainActivity, alertDialogShower)
     val appName = kiwixDataStore.appName.first()
-    updateState { copy(isTocButtonEnable = true, appName = appName) }
+    updateState { copy(appName = appName) }
     enableLeftDrawer()
     openPageInBookFromNavigationArguments(coreMainActivity)
   }

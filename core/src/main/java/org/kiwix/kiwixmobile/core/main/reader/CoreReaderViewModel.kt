@@ -304,11 +304,22 @@ abstract class CoreReaderViewModel(
   val isAndroid13OrAbove = kiwixPermissionChecker.isAndroid13orAbove()
 
   override fun sectionsLoaded(title: String, sections: List<DocumentSection>) {
-    updateState { copy(tableOfContentTitle = title, documentSections = sections) }
+    updateState {
+      copy(
+        tableOfContentTitle = title,
+        documentSections = sections,
+        isTocButtonEnable = !isSidebarDisabled() && sections.isNotEmpty()
+      )
+    }
   }
 
   override fun clearSections() {
-    updateState { copy(documentSections = emptyList()) }
+    updateState {
+      copy(
+        documentSections = emptyList(),
+        isTocButtonEnable = false
+      )
+    }
   }
 
   private fun setupDocumentParser() {
@@ -1072,6 +1083,7 @@ abstract class CoreReaderViewModel(
     // This fixes the scenario where the previous page is bookmarked and the next
     // page fails to load, ensuring the bookmark toggle is unset correctly.
     updateUrlFlow()
+    clearSections()
     Log.d(
       TAG_KIWIX,
       String.format(
@@ -1207,6 +1219,7 @@ abstract class CoreReaderViewModel(
 
   protected open suspend fun selectTab(position: Int) {
     readerWebViewManager.setCurrentWebViewIndex(position)
+    clearSections()
     updateBottomToolbarVisibility()
     updateUrlFlow()
     updateTableOfContents()
@@ -1850,6 +1863,12 @@ abstract class CoreReaderViewModel(
    * indicating whether the app is a branded app or not.
    */
   abstract fun isBrandedApp(): Boolean
+
+  /**
+   * Returns a boolean value indicating whether the sidebar (table of contents) is disabled.
+   * Can be overridden by branded app view models where DISABLE_SIDEBAR is configured.
+   */
+  open fun isSidebarDisabled(): Boolean = false
 
   /**
    * Initializes the reader view model, sub viewModels should override this method

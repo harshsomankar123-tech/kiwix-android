@@ -205,7 +205,7 @@ internal class CoreReaderViewModelTest {
   @Nested
   inner class DocumentSections {
     @Test
-    fun sectionsLoaded_updatesTableOfContentTitleAndDocumentSections() {
+    fun sectionsLoaded_withSections_updatesTableOfContentTitleAndDocumentSectionsAndEnablesTocButton() {
       val title = "Sample TOC Title"
       val sections = listOf(DocumentSection("Section 1", "sec_1", 1))
 
@@ -214,17 +214,48 @@ internal class CoreReaderViewModelTest {
       val state = viewModel.uiState.value
       assertThat(state.tableOfContentTitle).isEqualTo(title)
       assertThat(state.documentSections).isEqualTo(sections)
+      assertThat(state.isTocButtonEnable).isTrue()
     }
 
     @Test
-    fun clearSections_clearsDocumentSectionsInUiState() {
+    fun sectionsLoaded_withEmptySections_disablesTocButton() {
+      val title = "Sample TOC Title"
+      val sections = emptyList<DocumentSection>()
+
+      viewModel.updateUiStateForTest { copy(isTocButtonEnable = true) }
+      viewModel.sectionsLoaded(title, sections)
+
+      val state = viewModel.uiState.value
+      assertThat(state.tableOfContentTitle).isEqualTo(title)
+      assertThat(state.documentSections).isEmpty()
+      assertThat(state.isTocButtonEnable).isFalse()
+    }
+
+    @Test
+    fun sectionsLoaded_whenSidebarIsDisabled_disablesTocButtonEvenWithSections() {
+      val spyViewModel = spyk(viewModel)
+      every { spyViewModel.isSidebarDisabled() } returns true
+      val sections = listOf(DocumentSection("Section 1", "sec_1", 1))
+
+      spyViewModel.sectionsLoaded("Sample TOC Title", sections)
+
+      assertThat(spyViewModel.uiState.value.isTocButtonEnable).isFalse()
+    }
+
+    @Test
+    fun clearSections_clearsDocumentSectionsAndDisablesTocButtonInUiState() {
       viewModel.updateUiStateForTest {
-        copy(documentSections = listOf(DocumentSection("Section 1", "sec_1", 1)))
+        copy(
+          documentSections = listOf(DocumentSection("Section 1", "sec_1", 1)),
+          isTocButtonEnable = true
+        )
       }
 
       viewModel.clearSections()
 
-      assertThat(viewModel.uiState.value.documentSections).isEmpty()
+      val state = viewModel.uiState.value
+      assertThat(state.documentSections).isEmpty()
+      assertThat(state.isTocButtonEnable).isFalse()
     }
   }
 

@@ -134,7 +134,7 @@ class BrandedReaderViewModel @Inject constructor(
     }
     super.initialize(coreMainActivity, alertDialogShower)
     val appName = kiwixDataStore.appName.first()
-    updateState { copy(isTocButtonEnable = !BuildConfig.DISABLE_SIDEBAR, appName = appName) }
+    updateState { copy(appName = appName) }
     enableLeftDrawer()
     loadPageFromNavigationArguments(coreMainActivity)
     if (BuildConfig.DISABLE_EXTERNAL_LINK) {
@@ -474,6 +474,8 @@ class BrandedReaderViewModel @Inject constructor(
     }
     super.configureWebViewSelectionHandler(menu)
   }
+
+  override fun isSidebarDisabled(): Boolean = BuildConfig.DISABLE_SIDEBAR
 
   override fun openKiwixSupportUrl() {
     if (BuildConfig.SUPPORT_URL.isNotEmpty()) {
