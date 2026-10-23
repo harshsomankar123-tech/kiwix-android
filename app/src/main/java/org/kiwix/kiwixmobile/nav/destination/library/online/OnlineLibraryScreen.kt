@@ -22,6 +22,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -111,6 +113,8 @@ import org.kiwix.kiwixmobile.core.utils.ComposeDimens.DOWNLOADING_LIBRARY_PROGRE
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.EIGHT_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.FORTY_EIGHT_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.FOUR_DP
+import org.kiwix.kiwixmobile.core.utils.ComposeDimens.NO_ITEMS_AVAILABLE_IMAGE_HEIGHT
+import org.kiwix.kiwixmobile.core.utils.ComposeDimens.NO_ITEMS_AVAILABLE_IMAGE_WIDTH
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.ONE_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.SIXTEEN_DP
 import org.kiwix.kiwixmobile.core.utils.ComposeDimens.SIX_DP
@@ -356,7 +360,7 @@ private fun OnlineLibraryScreenContent(
     modifier = Modifier.fillMaxSize(),
     contentAlignment = Alignment.Center
   ) {
-    if (uiState.showNoContent) {
+    if (uiState.showNoContent && !uiState.showScanningProgressBar && !uiState.isRefreshing) {
       NoContentView(uiState.noContentMessage)
     } else {
       OnlineLibraryList(uiState, lazyListState, onlineLibraryViewModel)
@@ -495,6 +499,15 @@ private fun NoContentView(noContentMessage: String) {
     verticalArrangement = Arrangement.Center,
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
+    Image(
+      painter = painterResource(id = drawable.ic_no_items_available),
+      contentDescription = null,
+      modifier = Modifier.size(
+        width = NO_ITEMS_AVAILABLE_IMAGE_WIDTH,
+        height = NO_ITEMS_AVAILABLE_IMAGE_HEIGHT
+      )
+    )
+    Spacer(modifier = Modifier.height(SIXTEEN_DP))
     Text(
       text = noContentMessage,
       textAlign = TextAlign.Center,
